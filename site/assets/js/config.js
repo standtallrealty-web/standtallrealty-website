@@ -5,7 +5,7 @@
 window.SITE = {
   // 1) Paste your Google Apps Script "Web app URL" between the quotes.
   //    While this is empty the website runs in DEMO mode (nothing is saved for real).
-  API_URL: 'https://script.google.com/macros/s/AKfycbw4HTPNUBrSwHNOhLTkQ2rfoPw_qtXo0q8rOm3tcq3RGkS3XKL082djyVM9Xf249VTGgw/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbwEZTEPXclsJSffHqelHOfu9BfXry9UbpQxHAc1AaKBtoMhwZ00kbxJxDdVsEKRRPjt/exec',
 
   name: 'Stand Tall Realty',
   slogan: 'Where Your Dreams Stand Tall',

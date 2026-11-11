@@ -1,5 +1,5 @@
 /* DEMO MODE ONLY — runs the real backend code inside your browser so the site can be tried before the
-   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611120200. */
+   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611120238. */
 /*
  * Minimal Google Apps Script runtime emulator.
  * Used (1) by the automated tests in Node and (2) by the website's demo mode in the browser,
@@ -439,6 +439,18 @@ var REQ = { memo: {} };
 
 // ============================== ENTRY POINTS ==============================
 
+/** Run this once from the editor (▶ Run) to create the sheets and allow access.
+ *  It is the first function in the file so the editor picks it by default. */
+function setup() {
+  REQ = { memo: {} };
+  ensureSetup_(true);
+  rememberSettings_();
+  var ss = ss_();
+  if (!setting_('ADMIN_PASSWORD', ADMIN_PASSWORD)) Logger.log('⚠️ Type an admin password in ADMIN_PASSWORD (Code.gs settings), Save, and run setup again.');
+  Logger.log('✅ Setup complete. Sheet: ' + ss.getUrl());
+  Logger.log('Next: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).');
+}
+
 function doGet(e) {
   var p = (e && e.parameter) || {};
   if (p.action === 'listings' || p.action === 'listing') return json_(route_({ action: p.action, id: p.id }));
@@ -449,17 +461,6 @@ function doPost(e) {
   var body = {};
   try { body = JSON.parse((e && e.postData && e.postData.contents) || '{}'); } catch (err) { body = {}; }
   return json_(route_(body));
-}
-
-/** Run this once from the editor (▶ Run) to create the sheets and allow access. */
-function setup() {
-  REQ = { memo: {} };
-  ensureSetup_(true);
-  rememberSettings_();
-  var ss = ss_();
-  if (!setting_('ADMIN_PASSWORD', ADMIN_PASSWORD)) Logger.log('⚠️ Type an admin password in ADMIN_PASSWORD (Code.gs settings), Save, and run setup again.');
-  Logger.log('✅ Setup complete. Sheet: ' + ss.getUrl());
-  Logger.log('Next: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).');
 }
 
 /** When you edit the sheet by hand (e.g. change a Status), refresh the website quickly. */
