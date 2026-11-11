@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /admin.html
+Disallow: /chats.html
+Disallow: /account.html
+Sitemap: https://www.standtallrealty.com/sitemap.xml

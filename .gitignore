@@ -1,0 +1,10 @@
+dist/
+shots/
+preview/
+private/
+guide/*.png
+guide/*.pdf
+guide/_*
+node_modules/
+__pycache__/
+*.pyc
