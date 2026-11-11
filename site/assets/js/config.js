@@ -19,7 +19,7 @@ window.SITE = {
     { name: 'Kafil Shaikh', phone: '9920079048' },
     { name: 'Shahzeb Inamdar', phone: '9822033795' }
   ],
-  email: '',                 // e.g. 'info@standtallrealty.com' (leave empty to hide)
+  email: 'shahzebinamdar@standtallrealty.com',   // shown on the Contact page and footer (leave empty to hide)
   address: 'Unity Splendour, Salunke Vihar Rd, Borade Nagar, Wanowrie, Pune, Maharashtra 411040',
   mapQuery: 'Unity Splendour, Salunke Vihar Road, Borade Nagar, Wanowrie, Pune 411040',
   hours: 'Mon–Sat, 10:00 am – 7:30 pm',
@@ -31,7 +31,7 @@ window.SITE = {
   reraAgentNo: '',           // your MahaRERA agent registration no. — shown in the footer when filled
   approvalTime: 'within 24 hours',
   defaultCity: 'Pune',
-  focusAreas: ['NIBM', 'NIBM Annexe', 'Kondhwa', 'Undri', 'Parge Nagar', 'Kausar Baug', 'Lulla Nagar', 'Wanowrie', 'Mohammadwadi', 'Pisoli'],
+  focusAreas: ['Baner', 'Wakad', 'Hinjewadi', 'Kothrud', 'Kharadi', 'Viman Nagar', 'Wagholi', 'Hadapsar', 'Kondhwa', 'NIBM', 'Undri', 'Wanowrie'],
 
   // Ads tracking (optional): paste IDs to measure leads from Facebook / Google ads
   metaPixelId: '',

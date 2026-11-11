@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611120238';
+  var VER = '202611120355';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -448,6 +448,8 @@
 
   // ---------------------------------------------------------------- icons (inline SVG, 24px grid)
   var ICONS = {
+    mail: '<path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm0 2v.4l8 5.1 8-5.1V7H4zm16 2.8-7.5 4.8a1 1 0 0 1-1 0L4 9.8V17h16V9.8z"/>',
+    globe: '<path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.35.16-2h4.68c.09.65.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z"/>',
     phone: '<path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>',
     wa: '<path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3zm0 16.4c-1.4 0-2.8-.4-4-1.1l-.3-.2-2.7.7.7-2.6-.2-.3A7.4 7.4 0 1 1 12 19.4zm4.1-5.5c-.2-.1-1.3-.7-1.5-.7-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1a6 6 0 0 1-3-2.6c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.7-1.6c-.2-.4-.4-.4-.5-.4h-.4c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2.9 2.3c.1.2 1.6 2.5 4 3.5 1.5.6 2 .7 2.8.6.4-.1 1.3-.5 1.5-1.1.2-.5.2-1 .1-1.1l-.4-.3z"/>',
     chat: '<path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4.3 3.4A.5.5 0 0 1 4 20V5a1 1 0 0 1 0-1zm2 2v10.9L8.3 15H19V6H6z"/>',
@@ -697,9 +699,9 @@
       '<div class="grid-3">' +
       '<label class="field"><span>State</span><select data-k="state">' + LOC.states.map(function (s) { return '<option>' + esc(s) + '</option>'; }).join('') + '</select></label>' +
       '<label class="field"><span>City / town' + (opts.required ? ' <b>*</b>' : '') + '</span><select data-k="city">' + cityOptions('') + '</select><input data-k="cityText" placeholder="Type the city or town" hidden></label>' +
-      '<label class="field"><span>Locality / area' + (opts.required ? ' <b>*</b>' : '') + '</span><input data-k="locality" list="' + id + '" autocomplete="off" placeholder="Start typing, e.g. Kondhwa"><datalist id="' + id + '"></datalist></label>' +
+      '<label class="field"><span>Locality / area' + (opts.required ? ' <b>*</b>' : '') + '</span><input data-k="locality" list="' + id + '" autocomplete="off" placeholder="Start typing, e.g. Kothrud"><datalist id="' + id + '"></datalist></label>' +
       '</div>' +
-      (opts.details === false ? '' : '<div class="grid-2"><label class="field"><span>Landmark / road <em>(shown on the listing)</em></span><input data-k="landmark" maxlength="160" placeholder="e.g. Near D-Mart, NIBM Road"></label>' +
+      (opts.details === false ? '' : '<div class="grid-2"><label class="field"><span>Landmark / road <em>(shown on the listing)</em></span><input data-k="landmark" maxlength="160" placeholder="e.g. Near the metro station, Baner Road"></label>' +
         '<label class="field"><span>Pincode</span><input data-k="pincode" inputmode="numeric" maxlength="6" placeholder="411048"></label></div>');
     var st = $('[data-k=state]', el), cs = $('[data-k=city]', el), ct = $('[data-k=cityText]', el), lc = $('[data-k=locality]', el), dl = $('#' + id, el);
     var coords = { lat: '', lng: '' };
@@ -789,7 +791,7 @@
     }).join('') + '</div></fieldset>';
   }
   function intentFields(intent) {
-    var area = '<label class="field"><span>Preferred area(s)</span><input name="area" list="lead-areas" placeholder="e.g. NIBM, Kondhwa, Undri"></label>';
+    var area = '<label class="field"><span>Preferred area(s)</span><input name="area" list="lead-areas" placeholder="e.g. Baner, Kharadi, Kothrud"></label>';
     var where = '<label class="field"><span>Where is the property?</span><input name="area" list="lead-areas" placeholder="Locality, city"></label>';
     var types = ['Flat / apartment', 'Bungalow / villa', 'Row house', 'Penthouse'];
     switch (intent) {

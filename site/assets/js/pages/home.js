@@ -17,7 +17,7 @@
       mode = b.dataset.mode;
       $$('.search-tabs button').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)); });
       syncBudget();
-      locIn.placeholder = mode === 'plots' ? 'Locality or village' : 'Locality, e.g. NIBM';
+      locIn.placeholder = mode === 'plots' ? 'Locality or village' : 'Locality, e.g. Baner';
     });
   });
   function go(extra) {

@@ -78,7 +78,7 @@
       (admin ? '<div class="combo"><input data-photo-url placeholder="…or paste an image link (https://…)"><button type="button" class="btn btn-ghost btn-sm" data-add-url>Add link</button></div>' : '') + '</div>' +
       show('notPlot', '<fieldset class="field"><legend>Amenities</legend>' + chipChecks('amenities', AMENITIES) + '</fieldset>') +
       '<label class="field"><span>Describe the property</span><textarea name="description" rows="5" maxlength="4000" placeholder="What makes it a good home or investment? Mention the view, nearby schools and markets, road access, condition, etc."></textarea></label>' +
-      '<label class="field"><span>Highlights <em>(one per line, optional)</em></span><textarea name="highlights" rows="3" maxlength="1500" placeholder="Corner flat with 2 balconies&#10;5 min to NIBM Road"></textarea></label>' +
+      '<label class="field"><span>Highlights <em>(one per line, optional)</em></span><textarea name="highlights" rows="3" maxlength="1500" placeholder="Corner flat with 2 balconies&#10;5 min to the main road"></textarea></label>' +
       '<div class="grid-2">' + input('title', 'Listing title <em>(optional)</em>', 'maxlength="120" placeholder="We will write one if you leave this empty"') + input('videoUrl', 'Video link <em>(YouTube / Instagram, optional)</em>', 'type="url" placeholder="https://"') + '</div>' +
       '</section>';
 
