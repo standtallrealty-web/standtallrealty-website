@@ -1,0 +1,9 @@
+// Cloudflare deploy settings: serves the static website in ./site (no build step needed).
+{
+  "name": "standtallrealty-website",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./site",
+    "not_found_handling": "404-page"
+  }
+}
