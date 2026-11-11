@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611120052';
+  var VER = '202611120200';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
