@@ -412,6 +412,7 @@ window.ST_HI = {
   "Prices are as shared by the developer and may change. Stamp duty, registration and other charges are extra.": "क़ीमतें डेवलपर की बताई हुई हैं और बदल सकती हैं। स्टांप ड्यूटी, रजिस्ट्रेशन और दूसरे चार्ज अलग से लगेंगे।",
   "Privacy policy": "प्राइवेसी पॉलिसी",
   "Profile": "प्रोफ़ाइल",
+  "Projects": "प्रोजेक्ट",
   "Properties": "प्रॉपर्टी",
   "Properties for rent in Pune": "पुणे में किराये की प्रॉपर्टी",
   "Properties for sale and rent in Pune": "पुणे में बिक्री और किराये की प्रॉपर्टी",
