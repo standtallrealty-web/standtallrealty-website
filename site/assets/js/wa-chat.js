@@ -67,7 +67,7 @@
     ptype: { q: 'What kind of property is it?', chips: ['Flat / apartment', 'Bungalow / villa', 'Row house', 'Plot / land', 'Shop / office'], key: 'ptype', strict: true },
     where: { q: 'Which area is it in?', chips: function () { return AREAS.concat(['Other area']); }, ph: 'Or type the area', key: 'area' },
     wherez: ZONE, wherel: LOCS, whereq: SEARCH,
-    society: { q: 'Society or building name? Start typing and pick it from the list.', ph: 'e.g. Brahma Majestic', skip: 'Skip', key: 'society', chips: function () { return (st.geo || []).map(function (g) { return [g.name, g.label]; }); } },
+    society: { q: 'Society or building name? Start typing and pick it from the list.', ph: 'e.g. Brahma Majestic', skip: 'Skip', key: 'society', chips: function () { return societyChips(); } },
     obhk: { q: 'How many BHK?', chips: ['1 RK', '1 BHK', '2 BHK', '3 BHK', '4 BHK', '5+ BHK'], key: 'bhk', strict: true },
     size: {
       q: function (a) { return /Plot/.test(a.ptype) ? 'Plot size? (sq ft, guntha or acre)' : 'Carpet area in sq ft?'; },
@@ -145,6 +145,12 @@
     if ((page + 1) * PER_PAGE < all.length) out.push(['__more', 'More areas']);
     return out.concat([['__zones', 'Other part of Pune']]);
   }
+  function societyChips() {
+    var t = st.typedSoc || '', out = [];
+    if (t.length >= 2) out.push([t, 'Use "' + t + '"']);
+    (st.geo || []).forEach(function (g) { if (g.name.toLowerCase() !== t.toLowerCase()) out.push([g.name, g.label]); });
+    return out;
+  }
   function suggChips() {
     var out = (st.sugg || []).map(function (n) { return [n, n]; }).concat((st.geo || []).map(function (g) { return [g.label, g.label]; }));
     if (st.typedArea && (st.sugg || []).map(nz).indexOf(nz(st.typedArea)) < 0) out.push([st.typedArea, 'Use "' + st.typedArea + '"']);
@@ -183,11 +189,11 @@
       ST.placeSearch(q).then(function (r) {
         if (g0 !== gen || st.step !== step || input.value.trim() !== q) return;
         st.geo = r; save();
-        if (step === 'society') { replies(); input.value = q; }
-        else repliesEl.innerHTML = suggChips().map(function (c) { return '<button type="button" class="wac-chip" data-v="' + esc(c[0]) + '">' + esc(c[1]) + '</button>'; }).join('');
+        paint();
       });
     }, 260);
     input.addEventListener('input', function () {
+      if (st.step === 'society') { st.typedSoc = input.value.replace(/\s+/g, ' ').trim().slice(0, 80); paint(); }
       geoLive();
       if (!SUB.test(st.step)) return;
       var q = input.value.trim();
@@ -253,7 +259,7 @@
 
   // ------------------------------------------------------------ flow
   function go(step) {
-    st.step = step; st.geo = []; save();
+    st.step = step; st.geo = []; st.typedSoc = ''; save();
     if (step === 'results') return results();
     if (step === 'send') return send();
     if (step === 'confirm') return summary();
@@ -270,7 +276,7 @@
   function answer(v, label, skipped) {
     var step = st.step, s = STEPS[step] || {};
     clearReplies();
-    me(String(label || v).trim());
+    me(/^Use "/.test(label || '') ? String(v).trim() : String(label || v).trim());
     if (step === 'start') {
       st.flow = v; st.a = { flow: v };
       if (v === 'about' && ST.currentListing) st.a.listing = { id: ST.currentListing.id, title: ST.currentListing.title };
@@ -345,18 +351,23 @@
   function clearReplies() { if (repliesEl) repliesEl.innerHTML = ''; }
 
   /** Tap-to-answer buttons (and the WhatsApp button) for the current step. */
-  function replies() {
-    var s = STEPS[st.step];
-    clearReplies();
-    if (!s) { setInput(null, ' '); return; }
+  /** Draws the answer buttons for the current question; does not touch the text box (changing it while someone types breaks phone keyboards). */
+  function paint() {
+    var s = STEPS[st.step]; if (!s) return;
     var html = chipList(st.step).map(function (c) {
       return '<button type="button" class="wac-chip" data-v="' + esc(c[0]) + '">' + esc(c[1]) + '</button>';
     }).join('');
     if (s.skip) html += '<button type="button" class="wac-chip wac-skip" data-v="" data-skip>' + esc(s.skip) + '</button>';
     if (s.wa) html += '<a class="wac-wa" href="' + esc(ST.wa(waText())) + '" target="_blank" rel="noopener">' + icon('wa') + esc(val(s.wa, st.a)) + '</a>';
     repliesEl.innerHTML = html;
-    setInput(s);
     scrollEnd();
+  }
+  function replies() {
+    var s = STEPS[st.step];
+    clearReplies();
+    if (!s) { setInput(null, ' '); return; }
+    paint();
+    setInput(s);
   }
   function setInput(s, off) {
     var text = s && !s.strict;

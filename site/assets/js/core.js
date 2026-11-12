@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611130213';
+  var VER = '202611130227';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -1042,15 +1042,25 @@
       return out;
     }).catch(function () { return []; });
   }
-  /** Adds live building suggestions to a text field (a browser drop-down list). */
+  /** Adds live building suggestions under a text field. Tapping one fills the field; typing by hand always works. */
   function placeSuggest(input) {
     if (!input || !S.geoKey) return;
-    var id = 'geo' + Math.random().toString(36).slice(2, 8), dl = document.createElement('datalist');
-    dl.id = id; input.setAttribute('list', id); input.parentNode.appendChild(dl);
+    var box = document.createElement('div'); box.className = 'geo-sug'; box.hidden = true;
+    input.insertAdjacentElement('afterend', box);
+    box.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      input.value = b.getAttribute('data-v'); box.hidden = true;
+      input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
     input.addEventListener('input', debounce(function () {
       var v = input.value;
-      placeSearch(v).then(function (r) { if (input.value === v) dl.innerHTML = r.map(function (x) { return '<option value="' + esc(x.name) + '">' + esc(x.sub) + '</option>'; }).join(''); });
+      placeSearch(v).then(function (r) {
+        if (input.value !== v) return;
+        box.innerHTML = r.map(function (x) { return '<button type="button" data-v="' + esc(x.name) + '">' + esc(x.label) + '</button>'; }).join('');
+        box.hidden = !r.length || document.activeElement !== input;
+      });
     }, 250));
+    input.addEventListener('blur', function () { setTimeout(function () { box.hidden = true; }, 250); });
   }
 
   window.ST = {

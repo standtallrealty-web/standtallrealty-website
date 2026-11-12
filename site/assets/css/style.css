@@ -887,3 +887,9 @@ body[data-page=chats] .site-header { position: relative; }
   .wac, .wac-tease { transition: none; transform: none; }
   .wac-dots i { animation: none; opacity: .6; }
 }
+
+/* building suggestions under a field */
+.geo-sug { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 2px; }
+.geo-sug[hidden] { display: none; }
+.geo-sug button { font: inherit; font-size: .85rem; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line, #d8d2c4); background: #fff; color: inherit; cursor: pointer; text-align: left; }
+.geo-sug button:hover, .geo-sug button:focus-visible { border-color: var(--gold, #b8893b); }
