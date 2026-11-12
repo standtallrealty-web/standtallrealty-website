@@ -646,6 +646,22 @@ body.modal-open { overflow: hidden; }
 .lead-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .lead-row select { width: auto; min-height: 38px; font-size: 14px; }
 .lead-row input { min-height: 38px; font-size: 14px; flex: 1; min-width: 180px; }
+/* admin CRM: add/edit leads, follow-ups, bulk delete */
+.leads-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.lead-top .grow { flex: 1; min-width: 200px; }
+.lead-sel { display: flex; align-items: center; padding-top: 2px; }
+.lead-sel input, .bulk-bar input { width: 20px; height: 20px; accent-color: var(--navy); }
+.lead-card.is-sel { border-color: var(--navy); box-shadow: 0 0 0 1px var(--navy) inset; }
+.lead-fu { margin: 0; font-size: 14.5px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.lead-fu .pill .ic { width: 14px; height: 14px; }
+.lead-row .lead-del { color: var(--bad); }
+.bulk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 10px 14px; margin-bottom: 12px; position: sticky; top: calc(var(--header-h) + 8px); z-index: 5; }
+.bulk-bar #bulk-n { font-weight: 600; }
+.fu-box { border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px 14px; background: #FBFCFE; }
+.fu-box legend { font-weight: 600; padding: 0 6px; }
+.fu-quick { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 8px; }
+.chip-btn { border: 1px solid var(--line-2); background: #fff; border-radius: 999px; padding: 6px 12px; font: 500 13.5px var(--sans); color: var(--ink-2); cursor: pointer; }
+.chip-btn:hover { border-color: var(--navy); color: var(--navy); }
 .users-table { width: 100%; border-collapse: collapse; background: #fff; border-radius: var(--r); overflow: hidden; font-size: 14.5px; }
 .users-table th, .users-table td { text-align: left; padding: 11px 12px; border-bottom: 1px solid var(--line); }
 .users-table th { background: #F7F9FC; font-size: 13px; color: var(--muted); font-weight: 600; }

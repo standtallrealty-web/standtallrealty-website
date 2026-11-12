@@ -1,5 +1,5 @@
 /* DEMO MODE ONLY — runs the real backend code inside your browser so the site can be tried before the
-   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611121452. */
+   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611121609. */
 /*
  * Minimal Google Apps Script runtime emulator.
  * Used (1) by the automated tests in Node and (2) by the website's demo mode in the browser,
@@ -281,7 +281,18 @@
       base64Decode: function (s) { return toSigned(b64dec(s)); },
       base64DecodeWebSafe: function (s) { return toSigned(b64dec(s)); },
       newBlob: function (data, type, name) { return new Blob(typeof data === 'string' ? utf8(data) : data.map(function (b) { return b & 255; }), type, name); },
-      sleep: function () {}
+      sleep: function () {},
+      // subset of Java SimpleDateFormat used by Code.gs (yyyy MMM MM dd d EEE HH h mm a); Asia/Kolkata = UTC+5:30
+      formatDate: function (date, tz, fmt) {
+        var off = /Kolkata|Calcutta|IST|\+05:?30/.test(String(tz)) ? 330 : 0;
+        var d = new Date(new Date(date).getTime() + off * 60000);
+        var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'], DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+        var p2 = function (n) { return ('0' + n).slice(-2); }, h = d.getUTCHours();
+        return String(fmt).replace(/yyyy|MMM|MM|dd|d|EEE|HH|h|mm|a/g, function (t) {
+          return { yyyy: d.getUTCFullYear(), MMM: MON[d.getUTCMonth()], MM: p2(d.getUTCMonth() + 1), dd: p2(d.getUTCDate()), d: d.getUTCDate(),
+            EEE: DAY[d.getUTCDay()], HH: p2(h), h: (h % 12) || 12, mm: p2(d.getUTCMinutes()), a: h < 12 ? 'AM' : 'PM' }[t];
+        });
+      }
     };
 
     // ---------- Drive ----------
@@ -327,6 +338,22 @@
     };
     var Logger = { log: function () { if (opts.verbose) console.log.apply(console, arguments); } };
 
+    // ---------- ScriptApp: time triggers are only recorded (tests call the handler themselves) ----------
+    state.triggers = state.triggers || [];
+    function TriggerObj(t) { this._t = t; }
+    TriggerObj.prototype = { getHandlerFunction: function () { return this._t.fn; }, getUniqueId: function () { return this._t.id; } };
+    var ScriptApp = {
+      getProjectTriggers: function () { return state.triggers.map(function (t) { return new TriggerObj(t); }); },
+      deleteTrigger: function (tr) { state.triggers = state.triggers.filter(function (t) { return t.id !== tr._t.id; }); save(); },
+      newTrigger: function (fn) {
+        var t = { fn: fn, id: uuid() };
+        var b = { timeBased: function () { return b; }, everyMinutes: function (n) { t.everyMinutes = n; return b; },
+          everyHours: function (n) { t.everyHours = n; return b; }, at: function (dt) { t.at = new Date(dt).getTime(); return b; },
+          create: function () { state.triggers.push(t); save(); return new TriggerObj(t); } };
+        return b;
+      }
+    };
+
     // ---------- UrlFetch: tests plug in a fake SMS provider (opts.fetch). The browser preview never calls it. ----------
     var fetches = [];
     function HTTPResponse(code, body) { this._c = code; this._b = typeof body === 'string' ? body : JSON.stringify(body); }
@@ -349,7 +376,7 @@
     return {
       SpreadsheetApp: SpreadsheetApp, CacheService: CacheService, PropertiesService: PropertiesService, LockService: LockService,
       Utilities: Utilities, DriveApp: DriveApp, MailApp: MailApp, ContentService: ContentService, Session: Session, Logger: Logger,
-      UrlFetchApp: UrlFetchApp, __fetches: fetches,
+      UrlFetchApp: UrlFetchApp, ScriptApp: ScriptApp, __fetches: fetches,
       __state: function () { return state; }, __mails: mails, __flush: flush,
       __file: function (id) { return state.files[id] || null; },
       __sha256hex: function (s) { return sha256(utf8(s)).map(function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); },
@@ -368,7 +395,7 @@
     save: function (s) { try { localStorage.setItem(KEY, s); } catch (e) { /* storage full: keep in memory */ } } } });
   var SpreadsheetApp = rt.SpreadsheetApp, CacheService = rt.CacheService, PropertiesService = rt.PropertiesService, LockService = rt.LockService,
     Utilities = rt.Utilities, DriveApp = rt.DriveApp, MailApp = rt.MailApp, ContentService = rt.ContentService, Session = rt.Session, Logger = rt.Logger,
-    UrlFetchApp = rt.UrlFetchApp;
+    UrlFetchApp = rt.UrlFetchApp, ScriptApp = rt.ScriptApp;
 /**
  * ==========================================================================
  *  STAND TALL REALTY — Website backend (Google Apps Script)
@@ -423,14 +450,14 @@ var SCHEMA = {
     'district', 'city', 'locality', 'landmark', 'address', 'pincode', 'lat', 'lng', 'photos', 'videoUrl', 'ownerId',
     'ownerName', 'ownerRole', 'contactPhone', 'phoneMode', 'views', 'chats', 'rejectReason', 'adminNotes'],
   Leads: ['id', 'createdAt', 'status', 'intent', 'name', 'phone', 'verified', 'email', 'details', 'message', 'listingId',
-    'listingTitle', 'page', 'source', 'notes', 'userId'],
+    'listingTitle', 'page', 'source', 'notes', 'userId', 'followUpAt', 'followUpNote', 'remindedAt'],
   Users: ['id', 'createdAt', 'name', 'phone', 'verified', 'email', 'status', 'lastLoginAt', 'passHash', 'salt'],
   Chats: ['id', 'createdAt', 'updatedAt', 'listingId', 'listingTitle', 'buyerId', 'buyerName', 'ownerId', 'ownerName',
     'lastMessage', 'lastSender', 'buyerUnread', 'ownerUnread', 'phoneStatus', 'log'],
   Messages: ['id', 'chatId', 'createdAt', 'senderRole', 'senderName', 'type', 'text'],
   Activity: ['createdAt', 'type', 'listingId', 'userId', 'detail']
 };
-var TIME_COLS = { createdAt: 1, updatedAt: 1, approvedAt: 1, lastLoginAt: 1 };
+var TIME_COLS = { createdAt: 1, updatedAt: 1, approvedAt: 1, lastLoginAt: 1, followUpAt: 1, remindedAt: 1 };
 var MONEY_COLS = { price: 1, priceMax: 1, rent: 1, deposit: 1, maintenance: 1 };
 var NUM_COLS = { carpetArea: 1, lat: 1, lng: 1, views: 1, chats: 1, buyerUnread: 1, ownerUnread: 1 };
 var STATUS_COL = { Listings: ['status', LISTING_STATUSES], Leads: ['status', LEAD_STATUSES], Users: ['status', ['Active', 'Blocked']] };
@@ -447,6 +474,7 @@ function setup() {
   rememberSettings_();
   var ss = ss_();
   if (!setting_('ADMIN_PASSWORD', ADMIN_PASSWORD)) Logger.log('⚠️ Type an admin password in ADMIN_PASSWORD (Code.gs settings), Save, and run setup again.');
+  Logger.log(ensureFollowUpTrigger_() ? '✅ Follow-up email reminders are on (checked every 5 minutes).' : '⚠️ Could not switch on follow-up reminders. Run setup again and allow access.');
   Logger.log('✅ Setup complete. Sheet: ' + ss.getUrl());
   Logger.log('Next: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).');
 }
@@ -511,6 +539,8 @@ var ACTIONS = {
   adminDeleteListing: { fn: adminDeleteListing_, admin: true, write: true },
   adminLeads: { fn: adminLeads_, admin: true },
   adminUpdateLead: { fn: adminUpdateLead_, admin: true, write: true },
+  adminSaveLead: { fn: adminSaveLead_, admin: true, write: true },
+  adminDeleteLeads: { fn: adminDeleteLeads_, admin: true, write: true },
   adminUsers: { fn: adminUsers_, admin: true },
   adminSetUser: { fn: adminSetUser_, admin: true, write: true },
   adminChats: { fn: adminChats_, admin: true },
@@ -1446,7 +1476,7 @@ function apiListing_(b, ctx) {
   var o = publicView_(r, true);
   if (isOwner || isAdmin) { o.status = str_(r.status); o.rejectReason = str_(r.rejectReason); }
   o.isOwner = !!isOwner;
-  if (!isOwner && r.status === 'Approved') {
+  if (!isOwner && r.status === 'Approved' && !b.noCount) {
     try {
       var c = cache_(), k = 'v_' + r.id, n = Number(c.get(k) || 0) + 1;
       if (n >= 10) {
@@ -1812,10 +1842,16 @@ function adminOverview_() {
     chats: chats.length,
     adminUnread: chats.reduce(function (n, c) { return n + (c.ownerId === 'ADMIN' ? Number(c.ownerUnread || 0) : 0); }, 0),
     verifiedToday: count(leads, function (r) { return ms_(r.createdAt) > dayAgo && str_(r.verified) === 'Yes'; }),
+    followUpsDue: count(leads, function (r) { var t = ms_(r.followUpAt); return t && t <= endOfDayIst_() && r.status !== 'Closed' && r.status !== 'Not interested'; }),
     otp: otpStatus_(),
     sheetUrl: ss_().getUrl(),
     stamp: getStamp_('u_ADMIN')
   };
+}
+
+function endOfDayIst_() {
+  var off = 330 * 60000, d = new Date(Date.now() + off);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 23, 59, 59) - off;
 }
 
 function otpStatus_() {
@@ -1913,8 +1949,105 @@ function adminLeads_() {
   return readAll_('Leads').rows.map(function (r) {
     return { id: str_(r.id), createdAt: ms_(r.createdAt), status: str_(r.status), intent: str_(r.intent), name: str_(r.name),
       phone: str_(r.phone), verified: str_(r.verified), email: str_(r.email), details: str_(r.details), message: str_(r.message), listingId: str_(r.listingId),
-      listingTitle: str_(r.listingTitle), page: str_(r.page), source: str_(r.source), notes: str_(r.notes) };
+      listingTitle: str_(r.listingTitle), page: str_(r.page), source: str_(r.source), notes: str_(r.notes),
+      followUpAt: ms_(r.followUpAt), followUpNote: str_(r.followUpNote), remindedAt: ms_(r.remindedAt) };
   }).sort(function (a, b) { return b.createdAt - a.createdAt; });
+}
+
+/** Admin CRM: add a lead by hand (walk-in, phone call, Instagram...) or edit any lead, including its follow-up time. */
+function adminSaveLead_(b) {
+  var L = b.lead || {}, out = {};
+  if (L.name !== undefined) out.name = clean_(L.name, 80);
+  if (L.phone !== undefined) {
+    out.phone = normPhone_(L.phone);
+    if (!out.phone) throw uerr_('Enter a valid 10-digit mobile number.', 'VALIDATION');
+  }
+  if (L.email !== undefined) { out.email = clean_(L.email, 120); if (out.email && !validEmail_(out.email)) throw uerr_('That email address does not look right.', 'VALIDATION'); }
+  if (L.intent !== undefined) out.intent = INTENTS[str_(L.intent)] || clean_(L.intent, 60) || INTENTS.other;
+  if (L.details !== undefined) out.details = clean_(L.details, 1500);
+  if (L.message !== undefined) out.message = clean_(L.message, 1500);
+  if (L.source !== undefined) out.source = clean_(L.source, 200);
+  if (L.notes !== undefined) out.notes = clean_(L.notes, 1000);
+  if (L.status !== undefined) { if (LEAD_STATUSES.indexOf(L.status) < 0) throw uerr_('Unknown status.', 'VALIDATION'); out.status = L.status; }
+  if (L.followUpNote !== undefined) out.followUpNote = clean_(L.followUpNote, 300);
+  if (L.followUpAt !== undefined) {
+    var t = Number(L.followUpAt) || 0;
+    out.followUpAt = t ? new Date(t) : '';
+    out.remindedAt = '';   // a new time means a new reminder
+  }
+  var id = str_(b.id);
+  if (id) {
+    var row = findRow_('Leads', id);
+    if (row < 0) throw uerr_('Lead not found.', 'NOT_FOUND');
+    if (out.name !== undefined && out.name.length < 2) throw uerr_('Enter the name.', 'VALIDATION');
+    updateRow_('Leads', row, out);
+  } else {
+    if (!out.name || out.name.length < 2) throw uerr_('Enter the name.', 'VALIDATION');
+    if (!out.phone) throw uerr_('Enter a valid 10-digit mobile number.', 'VALIDATION');
+    var status = out.status;
+    var lead = saveLead_(Object.assign({ intent: INTENTS.other, page: 'admin', source: 'Added by admin', verified: '' }, out), false);
+    id = lead.id;
+    if (status && status !== 'New') updateRow_('Leads', findRow_('Leads', id), { status: status });
+  }
+  var reminders = out.followUpAt ? ensureFollowUpTrigger_() : null;
+  return { id: id, reminders: reminders };
+}
+
+/** Deletes several leads at once (bottom rows first, so row numbers stay right). */
+function adminDeleteLeads_(b) {
+  var ids = (Array.isArray(b.ids) ? b.ids : []).map(str_).filter(Boolean).slice(0, 500);
+  var rows = ids.map(function (id) { return findRow_('Leads', id); }).filter(function (r) { return r > 0; })
+    .sort(function (x, y) { return y - x; });
+  rows.forEach(function (r) { deleteRow_('Leads', r); });
+  invalidate_('Leads');
+  return { deleted: rows.length };
+}
+
+// ------------------------------ follow-up reminders (email) ------------------------------
+var FOLLOWUP_EVERY_MIN = 5;
+
+/** Time trigger, every 5 minutes: emails a reminder for each lead whose follow-up time has come. */
+function checkFollowUps() {
+  REQ = { memo: {}, now: new Date() };
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(20000)) return 0;
+  var sent = 0;
+  try {
+    var soon = Date.now() + 2 * 60000;   // up to 2 minutes early, so it is never more than ~3 minutes late
+    readAll_('Leads').rows.forEach(function (r) {
+      var t = ms_(r.followUpAt);
+      if (!t || t > soon || ms_(r.remindedAt) || r.status === 'Closed' || r.status === 'Not interested' || sent >= 20) return;
+      if (sendFollowUpMail_(r)) { updateRow_('Leads', r._row, { remindedAt: new Date() }); sent++; }
+    });
+  } finally { lock.releaseLock(); }
+  return sent;
+}
+
+function sendFollowUpMail_(r) {
+  try {
+    var to = adminEmail_();
+    if (!to || MailApp.getRemainingDailyQuota() < 2) return false;
+    var when = Utilities.formatDate(new Date(ms_(r.followUpAt)), 'Asia/Kolkata', 'EEE d MMM, h:mm a');
+    var wa = 'https://wa.me/91' + str_(r.phone) + '?text=' + encodeURIComponent('Hi ' + firstName_(r.name) + ', this is ' + BRAND + '.');
+    MailApp.sendEmail({
+      to: to, name: BRAND + ' Reminders',
+      subject: 'Call now: ' + str_(r.name) + ' (' + fmtPhone_(r.phone) + ')' + (r.followUpNote ? ' – ' + str_(r.followUpNote) : ''),
+      htmlBody: wrapMail_('<p style="margin:0 0 10px;padding:8px 12px;border-radius:6px;background:#FFF2D2;color:#8C5B00"><b>Follow-up time: ' + esc_(when) + '</b></p>' +
+        table_([['Name', r.name], ['Mobile', fmtPhone_(r.phone)], ['Reminder', r.followUpNote], ['Looking for', r.intent], ['Details', r.details],
+          ['Message', r.message], ['Your notes', r.notes], ['Status', r.status], ['Lead no.', r.id]]) +
+        btn_('tel:+91' + str_(r.phone), 'Call ' + firstName_(r.name)) + ' ' + btn_(wa, 'WhatsApp') + ' ' + btn_(SITE_URL + '/admin#leads', 'Open leads'))
+    });
+    return true;
+  } catch (e) { return false; }
+}
+
+/** Makes sure the 5-minute reminder check is installed (once). Needs permission the first time setup runs. */
+function ensureFollowUpTrigger_() {
+  try {
+    var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'checkFollowUps'; });
+    if (!has) ScriptApp.newTrigger('checkFollowUps').timeBased().everyMinutes(FOLLOWUP_EVERY_MIN).create();
+    return true;
+  } catch (e) { return false; }
 }
 
 function adminUpdateLead_(b) {

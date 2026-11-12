@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611121452';
+  var VER = '202611121609';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -12,6 +12,15 @@
   function $$(sel, el) { return Array.prototype.slice.call((el || document).querySelectorAll(sel)); }
   function esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+  /** Focus a field shortly after it appears, unless the person is already typing in another field of the same
+   *  box: a fast tap-and-type must never be split between two fields. */
+  function focusSoon(pick, scope, ms) {
+    setTimeout(function () {
+      var el = typeof pick === 'function' ? pick() : pick, a = document.activeElement;
+      if (!el || (a && a !== el && scope && scope.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName))) return;
+      try { el.focus(); } catch (e) {}
+    }, ms || 40);
+  }
   function debounce(fn, ms) { var t; return function () { var a = arguments, s = this; clearTimeout(t); t = setTimeout(function () { fn.apply(s, a); }, ms); }; }
   function qs(name) { return new URLSearchParams(location.search).get(name) || ''; }
   var mem = {};
@@ -209,7 +218,7 @@
     document.addEventListener('keydown', onKey);
     document.body.appendChild(wrap);
     document.body.classList.add('modal-open');
-    setTimeout(function () { var f = $('[autofocus]', wrap) || $('input:not([type=hidden]),select,textarea,button.btn', body); if (f) try { f.focus(); } catch (e) {} }, 40);
+    focusSoon(function () { return (opts.focus && $(opts.focus, wrap)) || $('[autofocus]', wrap) || $('input:not([type=hidden]),select,textarea,button.btn', body); }, wrap, 40);
     return { el: wrap, body: body, close: close };
   }
   function confirmBox(title, text, okLabel, danger) {
@@ -297,7 +306,7 @@
     $('[data-change]', el).addEventListener('click', function () { clearInterval(timer); if (opts.onChange) opts.onChange(); });
     countdown(opts.resendIn === undefined ? 30 : opts.resendIn);
     demo(opts.demoOtp);
-    setTimeout(function () { try { input.focus(); } catch (e) {} }, 60);
+    focusSoon(input, el, 60);
     return el;
   }
   function waitSeconds(err) { var w = /(\d+) seconds/.exec((err && err.message) || ''); return w ? Number(w[1]) : 30; }
@@ -313,7 +322,7 @@
       var reasonHtml = reason ? '<p class="modal-reason">' + esc(reason) + '</p>' : '';
       var terms = '<p class="small muted center">By continuing you agree to our <a href="terms.html" target="_blank">terms</a> and <a href="privacy.html" target="_blank">privacy policy</a>.</p>';
       function title(t) { $('h2', m.el).textContent = t; }
-      function focusFirst() { setTimeout(function () { var f = $('input:not([type=hidden])', body); if (f) try { f.focus(); } catch (e) {} }, 40); }
+      function focusFirst() { focusSoon(function () { return $('input:not([type=hidden])', body); }, body, 40); }
       function finish(r, created) {
         done = true;
         Auth.set(r.token, r.user);
@@ -394,7 +403,7 @@
           fieldError(form, ''); busy(btn, true, 'Logging in…');
           api('login', d).then(function (x) { finish(x, false); }).catch(function (err) { busy(btn, false); fieldError(form, err.message); });
         });
-        if (prefill) setTimeout(function () { try { form.password.focus(); } catch (e) {} }, 40); else focusFirst();
+        if (prefill) focusSoon(form.password, body, 40); else focusFirst();
       }
 
       // OTP switched off: classic tabs

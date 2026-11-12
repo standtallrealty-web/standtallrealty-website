@@ -32,6 +32,8 @@
     root.innerHTML = '<div class="empty"><h3>Something went wrong</h3><p>' + esc(err && err.message) + '</p><button class="btn btn-ghost" onclick="location.reload()">Reload</button></div>';
   }
   function refreshOverview() { return ST.api('adminOverview').then(function (o) { var prev = ov; ov = o; renderTabs(); if (prev && o.pending > prev.pending) ST.toast('New listing waiting for approval.', 'ok'); if (prev && o.newLeads > prev.newLeads) ST.toast('New enquiry received.', 'ok'); return o; }); }
+  /** A lead the admin marked New themselves is not a new website enquiry: count it so no toast fires. */
+  function ownNewLead(n) { if (ov && n > 0) ov.newLeads = (ov.newLeads || 0) + n; }
   function cur() { var h = (location.hash || '#overview').slice(1).split('='); return { tab: h[0] || 'overview', arg: h[1] || '' }; }
   function renderTabs() {
     var c = cur().tab, n = { pending: ov && ov.pending, leads: ov && ov.newLeads, chats: ov && ov.adminUnread };
@@ -44,7 +46,7 @@
     var r = cur();
     window.scrollTo(0, 0);
     ({ overview: overview, pending: function () { listingsView(true); }, listings: function () { listingsView(false); }, add: function () { editor(''); },
-      edit: function () { editor(r.arg); }, import: importView, leads: leadsView, chats: chatsView, users: usersView }[r.tab] || overview)();
+      edit: function () { editor(r.arg); }, import: importView, leads: function () { leadsView(r.arg); }, chats: chatsView, users: usersView }[r.tab] || overview)();
   }
   window.addEventListener('hashchange', function () { if (ST.Admin.token()) route(); });
   setInterval(function () { if (ST.Admin.token() && !document.hidden) refreshOverview().catch(function () {}); }, 60000);
@@ -54,6 +56,7 @@
     var o = ov;
     root.innerHTML = '<h1 style="font-size:28px">Overview</h1><div class="kpis">' +
       kpi('#pending', o.pending, 'Listings waiting for approval', o.pending) + kpi('#leads', o.newLeads, 'New enquiries to call', o.newLeads) +
+      (o.followUpsDue !== undefined ? kpi('#leads=due', o.followUpsDue, 'Follow-ups due today', o.followUpsDue) : '') +
       kpi('#chats', o.adminUnread, 'Unread chats for you', o.adminUnread) + kpi('#listings', o.live, 'Live listings') +
       kpi('#leads', o.leadsToday, 'Enquiries in the last 24 hours' + (o.otp && o.otp.on ? ', ' + (o.verifiedToday || 0) + ' verified by OTP' : '')) + kpi('#listings', o.total, 'All listings') + kpi('#users', o.users, 'Registered users') + kpi('#chats', o.chats, 'Chats on the website') + '</div>' +
       '<div class="tools"><div class="panel"><h2>Daily routine</h2><ol class="hl" style="list-style:decimal;padding-left:20px;display:block">' +
@@ -209,52 +212,204 @@
     });
   }
 
-  // ---------- leads
-  var LEAD_ST =['New', 'Contacted', 'Site visit', 'Negotiation', 'Closed', 'Not interested'];
-  function leadsView() {
-    root.innerHTML = '<h1 style="font-size:28px">Leads and enquiries</h1><div class="toolbar"><input class="grow" id="dq" placeholder="Search name, number, area"><select id="ds"><option value="">Any status</option>' + LEAD_ST.map(function (s) { return '<option>' + s + '</option>'; }).join('') + '</select><select id="di"><option value="">Any type</option></select><select id="dv"><option value="">Any number</option><option value="Yes">OTP verified</option><option value="No">Not verified</option></select><button class="btn btn-ghost" type="button" id="csv">Download CSV</button></div><div id="dbox"><div class="skeleton" style="min-height:160px"></div></div>';
-    ST.api('adminLeads').then(function (leads) {
-      leadsCache = leads;
-      var intents = leads.map(function (l) { return l.intent; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
+  // ---------- leads (a small CRM: add, edit, delete, follow-up reminders by email)
+  var LEAD_ST = ['New', 'Contacted', 'Site visit', 'Negotiation', 'Closed', 'Not interested'];
+  var LEAD_INTENTS = ['Buy a property', 'Take a property on rent', 'Sell my property', 'Rent out my property', 'Buy a plot / land', 'Sell a plot / land',
+    'Commercial – buy / rent / lease', 'New project / investment', 'Other'];
+  var LEAD_SOURCES = ['Walk-in', 'Phone call', 'WhatsApp', 'Instagram', 'Facebook', 'YouTube', 'OLX', 'Referral', 'Other'];
+  var sel = {};   // selected lead ids
+  function endOfToday() { var d = new Date(); d.setHours(23, 59, 59, 999); return d.getTime(); }
+  function isOpen(l) { return l.status !== 'Closed' && l.status !== 'Not interested'; }
+  function fmtWhen(ms) { return new Date(ms).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); }
+  function toLocalInput(ms) {
+    if (!ms) return '';
+    var d = new Date(ms), p = function (n) { return ('0' + n).slice(-2); };
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
+  }
+  function fromLocalInput(v) { var t = v ? new Date(v).getTime() : 0; return isNaN(t) ? 0 : t; }
+  function needsUpdate(err) { return err && err.code === 'BAD_ACTION'; }
+  var UPDATE_MSG = 'This needs the new Apps Script code. Follow the update steps, then try again.';
+
+  function leadsView(arg) {
+    sel = {};
+    root.innerHTML = '<div class="leads-head"><h1 style="font-size:28px;margin:0">Leads and enquiries</h1><button class="btn btn-gold" type="button" id="addlead">' + icon('plus') + 'Add lead</button></div>' +
+      '<div class="toolbar"><input class="grow" id="dq" placeholder="Search name, number, area"><select id="ds"><option value="">Any status</option>' + LEAD_ST.map(function (s) { return '<option>' + s + '</option>'; }).join('') + '</select>' +
+      '<select id="df"><option value="">Any follow-up</option><option value="due">Due today or overdue</option><option value="upcoming">Upcoming</option><option value="none">No follow-up</option></select>' +
+      '<select id="di"><option value="">Any type</option></select><select id="dv"><option value="">Any number</option><option value="Yes">OTP verified</option><option value="No">Not verified</option></select><button class="btn btn-ghost" type="button" id="csv">Download CSV</button></div>' +
+      '<div class="bulk-bar" id="bulk" hidden><label class="check"><input type="checkbox" id="selall"> Select all shown</label><span id="bulk-n"></span><button class="btn btn-danger btn-sm" type="button" id="bulk-del">Delete selected</button><button class="btn btn-ghost btn-sm" type="button" id="bulk-clear">Clear</button></div>' +
+      '<div id="dbox"><div class="skeleton" style="min-height:160px"></div></div>';
+    if (arg === 'due') $('#df').value = 'due';
+    $('#addlead').onclick = function () { leadModal(null); };
+    loadLeads().then(function () {
+      var intents = leadsCache.map(function (l) { return l.intent; }).filter(function (x, i, a) { return x && a.indexOf(x) === i; });
       $('#di').innerHTML += intents.map(function (i) { return '<option>' + esc(i) + '</option>'; }).join('');
-      draw();
-      ['#dq', '#ds', '#di', '#dv'].forEach(function (s) { $(s).addEventListener('input', draw); });
-      $('#csv').onclick = function () { csv(filtered()); };
+      drawLeads();
+      ['#dq', '#ds', '#df', '#di', '#dv'].forEach(function (s) { $(s).addEventListener('input', drawLeads); });
+      $('#csv').onclick = function () { csv(filteredLeads()); };
+      $('#selall').onchange = function () { var on = this.checked; filteredLeads().forEach(function (l) { if (on) sel[l.id] = 1; else delete sel[l.id]; }); drawLeads(); };
+      $('#bulk-clear').onclick = function () { sel = {}; drawLeads(); };
+      $('#bulk-del').onclick = bulkDelete;
     }).catch(handleErr);
-    function filtered() {
-      var q = $('#dq').value.toLowerCase(), s = $('#ds').value, it = $('#di').value, v = $('#dv').value;
-      return leadsCache.filter(function (l) { return (!s || l.status === s) && (!it || l.intent === it) && (!v || (v === 'Yes' ? l.verified === 'Yes' : l.verified !== 'Yes')) && (!q || [l.name, l.phone, l.details, l.message, l.listingId].join(' ').toLowerCase().indexOf(q) >= 0); });
-    }
-    function draw() {
-      var list = filtered();
-      $('#dbox').innerHTML = list.length ? list.map(function (l) {
-        return '<article class="lead-card" data-lead="' + esc(l.id) + '"><div class="lead-top"><div><span class="pill ' + (l.status === 'New' ? 'warn' : l.status === 'Closed' ? 'ok' : '') + '">' + esc(l.status) + '</span> <span class="pill gold">' + esc(l.intent) + '</span>' + verifiedPill(l.verified) + '<br><b>' + esc(l.name) + '</b> <span class="muted small">' + esc(ST.fmtPhone(l.phone)) + ', ' + esc(ST.timeAgo(l.createdAt)) + '</span></div>' +
-          '<div class="lead-row"><a class="btn btn-navy btn-sm" href="tel:+91' + esc(l.phone) + '">' + icon('phone') + 'Call</a><a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="' + ST.wa('Hi ' + l.name.split(' ')[0] + ', this is Stand Tall Realty. Thank you for your enquiry' + (l.listingTitle ? ' about ' + l.listingTitle : '') + '.', l.phone) + '">' + icon('wa') + 'WhatsApp</a></div></div>' +
-          '<div class="lead-details">' + [l.details, l.message ? '“' + l.message + '”' : '', l.email ? 'Email: ' + l.email : ''].filter(Boolean).map(esc).join('<br>') +
-          (l.listingId ? '<br>Property: <a href="property.html?id=' + encodeURIComponent(l.listingId) + '" target="_blank" rel="noopener">' + esc(l.listingId + ' – ' + l.listingTitle) + '</a>' : '') +
-          '<br><span class="small muted">Came from: ' + esc(l.source || 'website') + (l.page ? ', page ' + esc(l.page) : '') + '</span></div>' +
-          '<div class="lead-row"><label class="sr-only">Status</label><select data-lst>' + LEAD_ST.map(function (s) { return '<option' + (s === l.status ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select><input data-lnote placeholder="Add a note, e.g. visit fixed for Sunday" value="' + esc(l.notes) + '"></div></article>';
-      }).join('') : '<div class="empty"><h3>No leads yet</h3><p>Enquiries from the website will appear here and in your Google Sheet.</p></div>';
-    }
+  }
+  function loadLeads() { return ST.api('adminLeads').then(function (leads) { leadsCache = leads; return leads; }); }
+  function filteredLeads() {
+    if (!$('#dq')) return [];
+    var q = $('#dq').value.toLowerCase(), s = $('#ds').value, f = $('#df').value, it = $('#di').value, v = $('#dv').value, eod = endOfToday();
+    var list = leadsCache.filter(function (l) {
+      if (s && l.status !== s) return false;
+      if (it && l.intent !== it) return false;
+      if (v && (v === 'Yes' ? l.verified !== 'Yes' : l.verified === 'Yes')) return false;
+      if (f === 'due' && !(l.followUpAt && l.followUpAt <= eod && isOpen(l))) return false;
+      if (f === 'upcoming' && !(l.followUpAt && l.followUpAt > eod)) return false;
+      if (f === 'none' && l.followUpAt) return false;
+      return !q || [l.name, l.phone, l.details, l.message, l.listingId, l.notes, l.followUpNote].join(' ').toLowerCase().indexOf(q) >= 0;
+    });
+    if (f === 'due' || f === 'upcoming') list = list.slice().sort(function (a, b) { return a.followUpAt - b.followUpAt; });
+    return list;
+  }
+  function fuLine(l) {
+    if (!l.followUpAt) return '';
+    var now = Date.now(), cls = l.remindedAt ? 'ok' : !isOpen(l) ? '' : l.followUpAt <= now ? 'bad' : l.followUpAt <= endOfToday() ? 'warn' : '';
+    return '<p class="lead-fu"><span class="pill ' + cls + '">' + icon('calendar') + 'Follow-up ' + esc(fmtWhen(l.followUpAt)) + '</span>' +
+      (l.followUpNote ? ' <span>' + esc(l.followUpNote) + '</span>' : '') + (l.remindedAt ? ' <span class="small muted">Reminder sent</span>' : '') + '</p>';
+  }
+  function drawLeads() {
+    var list = filteredLeads(), n = Object.keys(sel).length;
+    $('#bulk').hidden = !list.length && !n;
+    $('#bulk-n').textContent = n ? n + ' selected' : '';
+    $('#bulk-del').hidden = $('#bulk-clear').hidden = !n;
+    $('#selall').checked = list.length > 0 && list.every(function (l) { return sel[l.id]; });
+    $('#dbox').innerHTML = list.length ? list.map(function (l) {
+      return '<article class="lead-card' + (sel[l.id] ? ' is-sel' : '') + '" data-lead="' + esc(l.id) + '"><div class="lead-top"><label class="lead-sel"><input type="checkbox" data-sel' + (sel[l.id] ? ' checked' : '') + ' aria-label="Select ' + esc(l.name) + '"></label><div class="grow"><span class="pill ' + (l.status === 'New' ? 'warn' : l.status === 'Closed' ? 'ok' : '') + '">' + esc(l.status) + '</span> <span class="pill gold">' + esc(l.intent) + '</span>' + verifiedPill(l.verified) + '<br><b>' + esc(l.name) + '</b> <span class="muted small">' + esc(ST.fmtPhone(l.phone)) + ', ' + esc(ST.timeAgo(l.createdAt)) + '</span></div>' +
+        '<div class="lead-row"><a class="btn btn-navy btn-sm" href="tel:+91' + esc(l.phone) + '">' + icon('phone') + 'Call</a><a class="btn btn-wa btn-sm" target="_blank" rel="noopener" href="' + ST.wa('Hi ' + l.name.split(' ')[0] + ', this is Stand Tall Realty. Thank you for your enquiry' + (l.listingTitle ? ' about ' + l.listingTitle : '') + '.', l.phone) + '">' + icon('wa') + 'WhatsApp</a></div></div>' +
+        fuLine(l) +
+        '<div class="lead-details">' + [l.details, l.message ? '“' + l.message + '”' : '', l.email ? 'Email: ' + l.email : ''].filter(Boolean).map(esc).join('<br>') +
+        (l.listingId ? '<br>Property: <a href="property.html?id=' + encodeURIComponent(l.listingId) + '" target="_blank" rel="noopener">' + esc(l.listingId + ' – ' + l.listingTitle) + '</a>' : '') +
+        '<br><span class="small muted">Came from: ' + esc(l.source || 'website') + (l.page && l.page !== 'admin' ? ', page ' + esc(l.page) : '') + '</span></div>' +
+        '<div class="lead-row"><label class="sr-only">Status</label><select data-lst>' + LEAD_ST.map(function (s) { return '<option' + (s === l.status ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select><input data-lnote placeholder="Add a note, e.g. visit fixed for Sunday" value="' + esc(l.notes) + '">' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-lact="edit">Edit</button><button class="btn btn-ghost btn-sm" type="button" data-lact="followup">' + icon('calendar') + (l.followUpAt ? 'Change follow-up' : 'Set follow-up') + '</button><button class="btn btn-ghost btn-sm lead-del" type="button" data-lact="del">Delete</button></div></article>';
+    }).join('') : '<div class="empty"><h3>' + (leadsCache.length ? 'No leads match' : 'No leads yet') + '</h3><p>' + (leadsCache.length ? 'Change the filters above to see more.' : 'Enquiries from the website appear here. Tap Add lead to enter walk-ins and phone calls.') + '</p></div>';
   }
   function verifiedPill(v) {
     if (v === 'Yes') return ' <span class="pill ok">' + icon('shield') + 'OTP verified</span>';
     if (v === 'No') return ' <span class="pill" title="The client did not enter the OTP. The number may still be right.">Not verified</span>';
     return '';
   }
+  function leadById(id) { return (leadsCache || []).filter(function (x) { return x.id === id; })[0]; }
+
+  /** Add or edit a lead. focus = 'followup' opens with the reminder fields first. */
+  function leadModal(l, focus) {
+    var isNew = !l; l = l || { status: 'New', intent: '', source: 'Walk-in' };
+    var opt = function (list, cur) { var all = list.slice(); if (cur && all.indexOf(cur) < 0) all.unshift(cur); return all.map(function (o) { return '<option' + (o === cur ? ' selected' : '') + '>' + esc(o) + '</option>'; }).join(''); };
+    var m = ST.openModal({ title: isNew ? 'Add a lead' : 'Edit lead', focus: focus === 'followup' ? '[name=followUpAt]' : '[name=name]', body:
+      '<form class="stack lead-form-admin" novalidate>' +
+      '<div class="grid-2"><label class="field"><span>Name</span><input name="name" required value="' + esc(l.name || '') + '" autocomplete="off"></label>' +
+      '<label class="field"><span>Mobile</span><input name="phone" type="tel" inputmode="numeric" required value="' + esc(l.phone || '') + '" placeholder="10-digit mobile"></label></div>' +
+      '<div class="grid-2"><label class="field"><span>Looking for</span><select name="intent">' + opt(LEAD_INTENTS, l.intent || 'Buy a property') + '</select></label>' +
+      '<label class="field"><span>Came from</span><select name="source">' + opt(LEAD_SOURCES, l.source || 'Walk-in') + '</select></label></div>' +
+      '<label class="field"><span>Details <em>(area, size, budget)</em></span><input name="details" value="' + esc(l.details || '') + '" placeholder="e.g. 2 BHK in Kondhwa, up to ₹75 L"></label>' +
+      '<fieldset class="field fu-box"><legend>Follow-up reminder</legend>' +
+      '<div class="grid-2"><label class="field"><span>Date and time</span><input name="followUpAt" type="datetime-local" value="' + esc(toLocalInput(l.followUpAt)) + '"></label>' +
+      '<label class="field"><span>Reminder note</span><input name="followUpNote" value="' + esc(l.followUpNote || '') + '" placeholder="e.g. Share 2 BHK options"></label></div>' +
+      '<p class="fu-quick"><button type="button" class="chip-btn" data-fu="1h">In 1 hour</button><button type="button" class="chip-btn" data-fu="t11">Tomorrow 11 am</button><button type="button" class="chip-btn" data-fu="t18">Tomorrow 6 pm</button><button type="button" class="chip-btn" data-fu="clear">No reminder</button></p>' +
+      '<p class="small muted" style="margin:0">We email you at this time with the name, number, a call button and your note.</p></fieldset>' +
+      '<div class="grid-2"><label class="field"><span>Status</span><select name="status">' + opt(LEAD_ST, l.status || 'New') + '</select></label>' +
+      '<label class="field"><span>Email <em>(optional)</em></span><input name="email" type="email" value="' + esc(l.email || '') + '"></label></div>' +
+      '<label class="field"><span>Notes</span><textarea name="notes" rows="2" maxlength="1000">' + esc(l.notes || '') + '</textarea></label>' +
+      '<p class="form-error" hidden></p>' +
+      '<div class="row-end"><button type="button" class="btn btn-ghost" data-cancel>Cancel</button><button type="submit" class="btn btn-gold">' + (isNew ? 'Add lead' : 'Save changes') + '</button></div></form>' });
+    var f = $('form', m.el);
+    $('[data-cancel]', f).onclick = function () { m.close(); };
+    $$('[data-fu]', f).forEach(function (b) {
+      b.onclick = function () {
+        var d = new Date(), k = b.dataset.fu;
+        if (k === 'clear') { f.followUpAt.value = ''; return; }
+        if (k === '1h') d = new Date(Date.now() + 3600000);
+        else { d.setDate(d.getDate() + 1); d.setHours(k === 't11' ? 11 : 18, 0, 0, 0); }
+        f.followUpAt.value = toLocalInput(d.getTime());
+      };
+    });
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var d = ST.formData(f), btn = $('button[type=submit]', f), errEl = $('.form-error', f);
+      var fail = function (msg) { errEl.textContent = msg; errEl.hidden = false; };
+      if ((d.name || '').trim().length < 2) { f.name.focus(); return fail('Enter the name.'); }
+      if (!ST.normPhone(d.phone)) { f.phone.focus(); return fail('Enter a valid 10-digit mobile number.'); }
+      var fu = fromLocalInput(d.followUpAt);
+      var lead = { name: d.name.trim(), phone: d.phone, intent: d.intent, source: d.source, details: d.details || '', status: d.status,
+        email: (d.email || '').trim(), notes: d.notes || '', followUpNote: d.followUpNote || '' };
+      if (!isNew || fu) lead.followUpAt = fu;
+      if (!isNew && fu === (l.followUpAt || 0)) delete lead.followUpAt;   // same time: keep "reminder sent"
+      ST.busy(btn, true, 'Saving…');
+      ST.api('adminSaveLead', { id: isNew ? undefined : l.id, lead: lead }).then(function (r) {
+        m.close();
+        ST.toast(r && r.reminders === false ? 'Saved. Email reminders are not switched on yet: run setup once in Apps Script.' : fu ? 'Saved. We will email you at ' + fmtWhen(fu) + '.' : 'Saved.', r && r.reminders === false ? 'error' : 'ok');
+        ownNewLead((lead.status === 'New' ? 1 : 0) - (!isNew && l.status === 'New' ? 1 : 0));
+        refreshOverview().catch(function () {});
+        return loadLeads().then(drawLeads);
+      }).catch(function (err) { ST.busy(btn, false); fail(needsUpdate(err) ? UPDATE_MSG : err.message); });
+    });
+  }
+
+  function deleteLeads(ids) {
+    return ST.api('adminDeleteLeads', { ids: ids }).catch(function (err) {
+      if (!needsUpdate(err)) throw err;
+      // older Apps Script code: delete one by one
+      return ids.reduce(function (chain, id) { return chain.then(function () { return ST.api('adminUpdateLead', { id: id, delete: true }); }); }, Promise.resolve());
+    });
+  }
+  function bulkDelete() {
+    var ids = Object.keys(sel), b = this;
+    if (!ids.length) return;
+    ST.confirmBox('Delete ' + ids.length + (ids.length === 1 ? ' lead?' : ' leads?'), 'They will be removed from the admin panel and your Google Sheet. This cannot be undone.', 'Delete', true).then(function (yes) {
+      if (!yes) return;
+      ST.busy(b, true, 'Deleting…');
+      deleteLeads(ids).then(function () {
+        ST.toast('Deleted ' + ids.length + (ids.length === 1 ? ' lead.' : ' leads.'), 'ok');
+        sel = {}; refreshOverview().catch(function () {});
+        return loadLeads().then(drawLeads);
+      }).catch(function (err) { ST.busy(b, false); ST.toast(err.message, 'error'); });
+    });
+  }
+
+  root.addEventListener('click', function (e) {
+    var a = e.target.closest('[data-lact]'); if (!a) return;
+    var card = a.closest('[data-lead]'), l = card && leadById(card.dataset.lead);
+    if (!l) return;
+    if (a.dataset.lact === 'edit') leadModal(l);
+    if (a.dataset.lact === 'followup') leadModal(l, 'followup');
+    if (a.dataset.lact === 'del') {
+      ST.confirmBox('Delete this lead?', l.name + ' (' + ST.fmtPhone(l.phone) + ') will be removed from the admin panel and your Google Sheet. This cannot be undone.', 'Delete', true).then(function (yes) {
+        if (!yes) return;
+        ST.busy(a, true);
+        ST.api('adminUpdateLead', { id: l.id, delete: true }).then(function () {
+          ST.toast('Lead deleted.', 'ok'); delete sel[l.id]; refreshOverview().catch(function () {});
+          return loadLeads().then(drawLeads);
+        }).catch(function (err) { ST.busy(a, false); ST.toast(err.message, 'error'); });
+      });
+    }
+  });
   root.addEventListener('change', function (e) {
+    if (e.target.hasAttribute('data-sel')) {
+      var c = e.target.closest('[data-lead]'); if (!c) return;
+      if (e.target.checked) sel[c.dataset.lead] = 1; else delete sel[c.dataset.lead];
+      drawLeads(); return;
+    }
     var card = e.target.closest('[data-lead]'); if (!card) return;
+    if (!e.target.hasAttribute('data-lst') && !e.target.hasAttribute('data-lnote')) return;
     var id = card.dataset.lead, patch = {};
     if (e.target.hasAttribute('data-lst')) patch.status = e.target.value;
     if (e.target.hasAttribute('data-lnote')) patch.notes = e.target.value;
+    var before = (leadById(id) || {}).status;
     ST.api('adminUpdateLead', Object.assign({ id: id }, patch)).then(function () {
-      var l = leadsCache.filter(function (x) { return x.id === id; })[0]; if (l) Object.assign(l, patch);
+      var l = leadById(id); if (l) Object.assign(l, patch);
+      if (patch.status === 'New' && before !== 'New') ownNewLead(1);
       ST.toast('Saved.', 'ok'); refreshOverview().catch(function () {});
     }).catch(function (err) { ST.toast(err.message, 'error'); });
   });
   function csv(list) {
-    var cols = ['id', 'createdAt', 'status', 'intent', 'name', 'phone', 'verified', 'email', 'details', 'message', 'listingId', 'listingTitle', 'source', 'notes'];
-    var rows = [cols.join(',')].concat(list.map(function (l) { return cols.map(function (c) { var v = c === 'createdAt' ? new Date(l[c]).toLocaleString('en-IN') : String(l[c] || '').trim(); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','); }));
+    var cols = ['id', 'createdAt', 'status', 'intent', 'name', 'phone', 'verified', 'email', 'details', 'message', 'listingId', 'listingTitle', 'source', 'notes', 'followUpAt', 'followUpNote'];
+    var rows = [cols.join(',')].concat(list.map(function (l) { return cols.map(function (c) { var v = c === 'createdAt' || c === 'followUpAt' ? (l[c] ? new Date(l[c]).toLocaleString('en-IN') : '') : String(l[c] || '').trim(); if (/^[=+\-@]/.test(v)) v = "'" + v; return '"' + String(v).replace(/"/g, '""') + '"'; }).join(','); }));
     var a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob(['﻿' + rows.join('\n')], { type: 'text/csv' }));
     a.download = 'stand-tall-leads-' + new Date().toISOString().slice(0, 10) + '.csv';
