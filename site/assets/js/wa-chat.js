@@ -67,7 +67,7 @@
     ptype: { q: 'What kind of property is it?', chips: ['Flat / apartment', 'Bungalow / villa', 'Row house', 'Plot / land', 'Shop / office'], key: 'ptype', strict: true },
     where: { q: 'Which area is it in?', chips: function () { return AREAS.concat(['Other area']); }, ph: 'Or type the area', key: 'area' },
     wherez: ZONE, wherel: LOCS, whereq: SEARCH,
-    society: { q: 'Society or building name?', ph: 'e.g. Brahma Majestic', skip: 'Skip', key: 'society' },
+    society: { q: 'Society or building name? Start typing and pick it from the list.', ph: 'e.g. Brahma Majestic', skip: 'Skip', key: 'society', chips: function () { return (st.geo || []).map(function (g) { return [g.name, g.label]; }); } },
     obhk: { q: 'How many BHK?', chips: ['1 RK', '1 BHK', '2 BHK', '3 BHK', '4 BHK', '5+ BHK'], key: 'bhk', strict: true },
     size: {
       q: function (a) { return /Plot/.test(a.ptype) ? 'Plot size? (sq ft, guntha or acre)' : 'Carpet area in sq ft?'; },
@@ -146,7 +146,7 @@
     return out.concat([['__zones', 'Other part of Pune']]);
   }
   function suggChips() {
-    var out = (st.sugg || []).map(function (n) { return [n, n]; });
+    var out = (st.sugg || []).map(function (n) { return [n, n]; }).concat((st.geo || []).map(function (g) { return [g.label, g.label]; }));
     if (st.typedArea && (st.sugg || []).map(nz).indexOf(nz(st.typedArea)) < 0) out.push([st.typedArea, 'Use "' + st.typedArea + '"']);
     return out.concat([['__zones', 'Browse by part of Pune']]);
   }
@@ -177,7 +177,18 @@
       '<p class="wac-foot">Your details go only to Stand Tall Realty.</p>';
     document.body.appendChild(root);
     list = $('.wac-log', root); repliesEl = $('.wac-replies', root); form = $('.wac-input', root); input = form.t;
+    var geoLive = ST.debounce(function () {
+      var q = input.value.trim(), step = st.step, g0 = gen;
+      if (q.length < 3 || (step !== 'society' && !/^(area|where)q$/.test(step))) { if (st.geo && st.geo.length) { st.geo = []; save(); } return; }
+      ST.placeSearch(q).then(function (r) {
+        if (g0 !== gen || st.step !== step || input.value.trim() !== q) return;
+        st.geo = r; save();
+        if (step === 'society') { replies(); input.value = q; }
+        else repliesEl.innerHTML = suggChips().map(function (c) { return '<button type="button" class="wac-chip" data-v="' + esc(c[0]) + '">' + esc(c[1]) + '</button>'; }).join('');
+      });
+    }, 260);
     input.addEventListener('input', function () {
+      geoLive();
       if (!SUB.test(st.step)) return;
       var q = input.value.trim();
       if (q.length < 2) return;
@@ -242,7 +253,7 @@
 
   // ------------------------------------------------------------ flow
   function go(step) {
-    st.step = step; save();
+    st.step = step; st.geo = []; save();
     if (step === 'results') return results();
     if (step === 'send') return send();
     if (step === 'confirm') return summary();

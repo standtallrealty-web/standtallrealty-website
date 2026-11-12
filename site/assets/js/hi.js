@@ -589,6 +589,7 @@ window.ST_HI = {
   "Smart door lock": "स्मार्ट डोर लॉक",
   "Society / project name": "सोसाइटी / प्रोजेक्ट का नाम",
   "Society or building name?": "सोसाइटी या बिल्डिंग का नाम?",
+  "Society or building name? Start typing and pick it from the list.": "सोसाइटी या बिल्डिंग का नाम? लिखना शुरू करें और लिस्ट से चुनें।",
   "Sold": "बिक गई",
   "Something went wrong. Please try again.": "कुछ गड़बड़ हो गई। कृपया फिर से कोशिश करें।",
   "Sort by": "क्रम",

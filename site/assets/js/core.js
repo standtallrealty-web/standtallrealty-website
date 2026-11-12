@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611130156';
+  var VER = '202611130213';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -1015,6 +1015,44 @@
     loadAnalytics();
   }
 
+
+  /** Finds buildings, societies and areas in the Pune region as the visitor types (Geoapify autocomplete).
+      Resolves to [{ name, sub, label }]; to [] on any problem, so typing a name by hand always still works. */
+  var geoCache = {}, geoCtl = null;
+  function placeSearch(text) {
+    var q = String(text || '').trim();
+    if (!S.geoKey || q.length < 3) return Promise.resolve([]);
+    var k = q.toLowerCase();
+    if (geoCache[k]) return Promise.resolve(geoCache[k]);
+    if (geoCtl) try { geoCtl.abort(); } catch (e) {}
+    geoCtl = window.AbortController ? new AbortController() : null;
+    var url = 'https://api.geoapify.com/v1/geocode/autocomplete?text=' + encodeURIComponent(q + ' Pune') +
+      '&filter=rect:73.3,18.2,74.4,18.95&bias=proximity:73.8567,18.5204&limit=7&lang=en&apiKey=' + encodeURIComponent(S.geoKey);
+    return fetch(url, geoCtl ? { signal: geoCtl.signal } : {}).then(function (r) { return r.ok ? r.json() : { features: [] }; }).then(function (j) {
+      var seen = {}, out = [];
+      ((j && j.features) || []).forEach(function (f) {
+        var p = f.properties || {}, name = String(p.name || p.address_line1 || '').trim();
+        if (!name || /^\d+$/.test(name)) return;
+        var sub = [p.suburb || p.district || p.neighbourhood, p.city || p.town || p.village].filter(Boolean).filter(function (x, i, a) { return a.indexOf(x) === i && x !== name && x !== 'Pune'; }).join(', ');
+        var key = (name + '|' + sub).toLowerCase();
+        if (seen[key]) return; seen[key] = 1;
+        out.push({ name: name.slice(0, 80), sub: sub, label: sub ? name + ', ' + sub : name });
+      });
+      geoCache[k] = out;
+      return out;
+    }).catch(function () { return []; });
+  }
+  /** Adds live building suggestions to a text field (a browser drop-down list). */
+  function placeSuggest(input) {
+    if (!input || !S.geoKey) return;
+    var id = 'geo' + Math.random().toString(36).slice(2, 8), dl = document.createElement('datalist');
+    dl.id = id; input.setAttribute('list', id); input.parentNode.appendChild(dl);
+    input.addEventListener('input', debounce(function () {
+      var v = input.value;
+      placeSearch(v).then(function (r) { if (input.value === v) dl.innerHTML = r.map(function (x) { return '<option value="' + esc(x.name) + '">' + esc(x.sub) + '</option>'; }).join(''); });
+    }, 250));
+  }
+
   window.ST = {
     S: S, DEMO: DEMO, ASSETS: ASSETS, $: $, $$: $$, esc: esc, sleep: sleep, debounce: debounce, qs: qs, store: store,
     inr: inr, rupees: rupees, priceLabel: priceLabel, priceSuffix: priceSuffix, bhkLabel: bhkLabel, areaLabel: areaLabel, timeAgo: timeAgo,
@@ -1025,7 +1063,7 @@
     detectLocation: detectLocation, reverseGeocode: reverseGeocode, distanceKm: distanceKm, cityOptions: cityOptions, fillLocalities: fillLocalities,
     locationPicker: locationPicker, compressImage: compressImage, leadForm: leadForm, openEnquiry: openEnquiry, INTENTS: INTENTS, otpBox: otpBox, siteConfig: siteConfig,
     BUY_BUDGETS: BUY_BUDGETS, RENT_BUDGETS: RENT_BUDGETS, BUDGET_SALE: BUDGET_SALE, BUDGET_RENT: BUDGET_RENT, budgetOptions: budgetOptions, inBudget: inBudget,
-    track: track, leadSource: leadSource, initials: initials, parseAmount: parseAmount
+    track: track, leadSource: leadSource, initials: initials, parseAmount: parseAmount, placeSearch: placeSearch, placeSuggest: placeSuggest
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

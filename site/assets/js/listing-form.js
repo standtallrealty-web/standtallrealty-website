@@ -106,6 +106,7 @@
     el.innerHTML = '<form class="lf' + (admin ? ' lf-all' : '') + '" novalidate>' + markup(admin) + '</form>';
     var form = $('form', el);
     var loc = ST.locationPicker($('[data-loc]', form), { required: true, defaultCity: ST.S.defaultCity || 'Pune' });
+    ST.placeSuggest(form.querySelector('[name=projectName]'));
     var photos = []; // {id} existing or {data} new
 
     function isList(f) { return f && f.length !== undefined && !f.tagName; }

@@ -32,6 +32,8 @@ window.SITE = {
   approvalTime: 'within 24 hours',
   defaultCity: 'Pune',
   focusAreas: ['Baner', 'Wakad', 'Hinjewadi', 'Kothrud', 'Kharadi', 'Viman Nagar', 'Wagholi', 'Hadapsar', 'Kondhwa', 'NIBM', 'Undri', 'Wanowrie'],
+  // Building / society name search (Geoapify, OpenStreetMap data). The key is meant to be public; limit it to the site's address in the Geoapify dashboard.
+  geoKey: '47fa867637bd4c1c813cd3ec1bdc8eeb',
   // Areas offered as quick answers in the website chat (green WhatsApp button), in this order
   chatAreas: ['Kondhwa', 'NIBM', 'Undri', 'Wanowrie', 'Hadapsar', 'Kharadi', 'Baner', 'Wakad'],
 
