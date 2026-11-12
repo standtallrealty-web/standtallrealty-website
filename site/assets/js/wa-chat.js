@@ -17,7 +17,7 @@
 
   var S = ST.S, $ = ST.$, esc = ST.esc, icon = ST.icon;
   var REDUCE = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-  var KEY = 'st_chat', ME = 'st_chat_me', TEASED = 'st_chat_teased';
+  var KEY = 'st_chat', ME = 'st_chat_me', TEASED = 'st_chat_teased', AUTO = 'st_chat_auto';
   var AREAS = S.chatAreas && S.chatAreas.length ? S.chatAreas : ['Kondhwa', 'NIBM', 'Undri', 'Wanowrie', 'Hadapsar', 'Kharadi', 'Baner', 'Wakad'];
   var HOMES = /Flat|Bungalow|Row house/;
 
@@ -35,6 +35,9 @@
 
   // ------------------------------------------------------------ questions
   // chips: [value, label] or a plain label. strict: only the chips are valid answers.
+  var ZONE = { q: 'Which part of Pune is it in? Or type the area name below.', ph: 'Or type the area name', key: 'area', chips: function () { return zoneChips(); } };
+  var LOCS = { q: function () { return 'Pick the area in ' + (st.zone || 'Pune') + '. Not listed? Type the name below.'; }, ph: 'Or type the area name', key: 'area', chips: function () { return localChips(); } };
+  var SEARCH = { q: 'Type the area, society or landmark and pick the match from the list.', ph: 'e.g. Pimple Saudagar', key: 'area', chips: function () { return suggChips(); } };
   var STEPS = {
     start: {
       q: function () {
@@ -45,7 +48,8 @@
       },
       strict: true, wa: 'Chat with us on WhatsApp'
     },
-    area: { q: 'Which area are you looking in?', chips: function () { return AREAS.concat(['Any area']); }, ph: 'Or type an area', key: 'area' },
+    area: { q: 'Which area are you looking in?', chips: function () { return AREAS.concat(['Other area', 'Any area']); }, ph: 'Or type an area', key: 'area' },
+    areaz: ZONE, areal: LOCS, areaq: SEARCH,
     bhk: {
       q: 'How many bedrooms?', key: 'bhk', strict: true,
       chips: function (a) { return (a.flow === 'rent' ? ['1 RK'] : []).concat(['1 BHK', '2 BHK', '3 BHK', '4+ BHK', 'Any']); }
@@ -61,7 +65,8 @@
     },
     deal: { q: 'Great! Do you want to sell it or rent it out?', chips: [['sale', 'Sell'], ['rent', 'Rent out']], key: 'deal', strict: true },
     ptype: { q: 'What kind of property is it?', chips: ['Flat / apartment', 'Bungalow / villa', 'Row house', 'Plot / land', 'Shop / office'], key: 'ptype', strict: true },
-    where: { q: 'Which area is it in?', chips: function () { return AREAS; }, ph: 'Or type the area', key: 'area' },
+    where: { q: 'Which area is it in?', chips: function () { return AREAS.concat(['Other area']); }, ph: 'Or type the area', key: 'area' },
+    wherez: ZONE, wherel: LOCS, whereq: SEARCH,
     society: { q: 'Society or building name?', ph: 'e.g. Brahma Majestic', skip: 'Skip', key: 'society' },
     obhk: { q: 'How many BHK?', chips: ['1 RK', '1 BHK', '2 BHK', '3 BHK', '4 BHK', '5+ BHK'], key: 'bhk', strict: true },
     size: {
@@ -97,6 +102,54 @@
     return true;
   }
   function val(x, a) { return typeof x === 'function' ? x(a) : x; }
+
+  // ------------------------------------------------------------ searching every Pune locality
+  var AREA_LIST = null;
+  function areaList() {
+    if (AREA_LIST) return AREA_LIST;
+    var L = window.ST_LOC || {}, seen = {}, out = [];
+    var src = ((L.localities || {})['Pune'] || []).concat((L.localities || {})['Pimpri-Chinchwad'] || []);
+    ((L.districts || []).filter(function (d) { return d[0] === 'Pune'; })[0] || [0, []])[1].forEach(function (t) { src.push(t); });
+    src.concat(AREAS).forEach(function (n) { var k = nz(n); if (k && !seen[k]) { seen[k] = 1; out.push({ n: n, k: k }); } });
+    return (AREA_LIST = out);
+  }
+  function nz(x) { return String(x || '').toLowerCase().replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim(); }
+  function near(a, b) {   // one slip of the finger: a letter changed, added or missing
+    if (Math.abs(a.length - b.length) > 1 || a.length < 4) return false;
+    var i = 0; while (i < a.length && i < b.length && a[i] === b[i]) i++;
+    return a.slice(i + 1) === b.slice(i + 1) || a.slice(i) === b.slice(i + 1) || a.slice(i + 1) === b.slice(i);
+  }
+  function findAreas(text) {
+    var q = nz(text); if (q.length < 2) return [];
+    var hits = [];
+    areaList().forEach(function (a) {
+      var score = -1, ws = a.k.split(' ');
+      if (a.k === q) score = 0;
+      else if (a.k.indexOf(q) === 0) score = 1;
+      else if (ws.some(function (w) { return w.indexOf(q) === 0; })) score = 2;
+      else if (a.k.indexOf(q) > -1) score = 3;
+      else if (near(q, a.k) || ws.some(function (w) { return near(q, w); })) score = 4;
+      if (score >= 0) hits.push({ s: score, a: a });
+    });
+    hits.sort(function (x, y) { return x.s - y.s || x.a.n.length - y.a.n.length; });
+    return hits.slice(0, 6).map(function (h) { return h.a.n; });
+  }
+  var SUB = /^(area|where)[zlq]$/, PER_PAGE = 12;
+  function zoneChips() {
+    var z = (window.ST_LOC || {}).puneZones || {};
+    return Object.keys(z).map(function (k) { return ['z:' + k, k]; }).concat([['z:search', 'Search by name'], ['__back', 'Back to main areas']]);
+  }
+  function localChips() {
+    var all = ((window.ST_LOC || {}).puneZones || {})[st.zone] || [], page = st.page || 0;
+    var out = all.slice(page * PER_PAGE, page * PER_PAGE + PER_PAGE).map(function (n) { return [n, n]; });
+    if ((page + 1) * PER_PAGE < all.length) out.push(['__more', 'More areas']);
+    return out.concat([['__zones', 'Other part of Pune']]);
+  }
+  function suggChips() {
+    var out = (st.sugg || []).map(function (n) { return [n, n]; });
+    if (st.typedArea && (st.sugg || []).map(nz).indexOf(nz(st.typedArea)) < 0) out.push([st.typedArea, 'Use "' + st.typedArea + '"']);
+    return out.concat([['__zones', 'Browse by part of Pune']]);
+  }
   function chipList(step) {
     var s = STEPS[step]; if (!s || !s.chips) return [];
     return val(s.chips, st.a).map(function (c) { return Array.isArray(c) ? c : [c, c]; });
@@ -124,6 +177,14 @@
       '<p class="wac-foot">Your details go only to Stand Tall Realty.</p>';
     document.body.appendChild(root);
     list = $('.wac-log', root); repliesEl = $('.wac-replies', root); form = $('.wac-input', root); input = form.t;
+    input.addEventListener('input', function () {
+      if (!SUB.test(st.step)) return;
+      var q = input.value.trim();
+      if (q.length < 2) return;
+      st.step = st.step.slice(0, -1) + 'q';
+      st.sugg = findAreas(q); st.typedArea = q.slice(0, 60);
+      repliesEl.innerHTML = suggChips().map(function (c) { return '<button type="button" class="wac-chip" data-v="' + esc(c[0]) + '">' + esc(c[1]) + '</button>'; }).join('');
+    });
     $('[data-close]', root).onclick = close;
     $('[data-restart]', root).onclick = function () { restart(); };
     form.addEventListener('submit', function (e) { e.preventDefault(); var t = input.value.trim(); if (!t) return; input.value = ''; typed(t); });
@@ -205,6 +266,18 @@
       return next();
     }
     if (v === 'restart') return restart();
+    if ((step === 'area' || step === 'where') && v === 'Other area') { st.sugg = []; st.typedArea = ''; return go(step + 'z'); }
+    if (SUB.test(step)) {
+      var orig = step.slice(0, -1);
+      st.typedArea = '';
+      if (v === '__back') return go(orig);
+      if (v === '__zones') return go(orig + 'z');
+      if (v === 'z:search') { st.sugg = []; return go(orig + 'q'); }
+      if (/^z:/.test(v)) { st.zone = v.slice(2); st.page = 0; return go(orig + 'l'); }
+      if (v === '__more') { st.page = (st.page || 0) + 1; save(); return queue.then(replies); }
+      st.sugg = []; st.a.area = v; st.step = orig; save();
+      return next();
+    }
     if (step === 'more' && v === 'no') return bye();
     if (step === 'confirm' && v === 'again') { st.a = { flow: 'list' }; st.step = 'start'; bot(esc('Okay, let us start again.')); return next(); }
     if (step === 'retry') return go('send');
@@ -217,6 +290,18 @@
   function typed(text) {
     var step = st.step, s = STEPS[step];
     if (!s) return;
+    if (SUB.test(step)) {
+      var zones = (window.ST_LOC || {}).puneZones || {}, zq = nz(text).replace(/ pune$|^pune /, ''), zn = Object.keys(zones).filter(function (k) { return nz(k) === nz(text) || nz(k).replace(/ pune$/, '') === zq; })[0];
+      if (zn) { clearReplies(); me(text); st.zone = zn; st.page = 0; return go(step.slice(0, -1) + 'l'); }
+      step = st.step = step.slice(0, -1) + 'q';
+      var q = text.replace(/\s+/g, ' ').trim();
+      if (q.length < 2) { clearReplies(); me(text); bot(esc('Please type at least two letters of the area name.')); return queue.then(replies); }
+      var exact = areaList().filter(function (a) { return a.k === nz(q); })[0];
+      if (exact) { st.step = step; return answer(exact.n, text); }
+      st.sugg = findAreas(q); st.typedArea = q.slice(0, 60); clearReplies(); me(text);
+      bot(esc(st.sugg.length ? 'Is it one of these? Tap the right one.' : 'We could not find that in our list. Tap to use it as you typed it, or try another spelling.'));
+      return queue.then(replies);
+    }
     var low = text.toLowerCase(), key = function (x) { return String(x).toLowerCase().replace(/[^a-z0-9+]/g, ''); };
     var hit = chipList(step).filter(function (c) { return key(c[1]) === key(text) || key(c[0]) === key(text); })[0];
     if (!hit && step === 'start') {
@@ -224,6 +309,7 @@
       if (guess) hit = chipList('start').filter(function (c) { return c[0] === guess; })[0];
     }
     if (hit) return answer(hit[0], text);
+    if (step === 'area' || step === 'where') { st.step = step + 'q'; save(); return typed(text); }
     if (s.strict) { clearReplies(); me(text); bot(esc('Please tap one of the options below.')); return queue.then(replies); }
     var c = check(step, text);
     if (c.err) { clearReplies(); me(text); bot(esc(c.err)); return queue.then(replies); }
@@ -467,9 +553,10 @@
     started = true;
     go('start');
   }
-  function open(flow) {
+  function open(flow, auto) {
     build();
     hideTease(true);
+    try { sessionStorage.setItem(AUTO, '1'); } catch (e) {}
     if (root.hidden) {
       lastFocus = document.activeElement;
       root.hidden = false;
@@ -486,7 +573,7 @@
       var g = gen;
       queue.then(function () { if (g === gen && st.step === 'start' && !st.flow) answer(flow, (chipList('start').filter(function (c) { return c[0] === flow; })[0] || [flow, flow])[1]); });
     } else if (!started) { started = true; if (st.log.length) restore(); else go('start'); }
-    setTimeout(function () { var f = $('.wac-chip', repliesEl) || input; if (window.innerWidth > 640 || f !== input) try { f.focus({ preventScroll: true }); } catch (e) {} }, REDUCE ? 0 : 420);
+    if (!auto) setTimeout(function () { var f = $('.wac-chip', repliesEl) || input; if (window.innerWidth > 640 || f !== input) try { f.focus({ preventScroll: true }); } catch (e) {} }, REDUCE ? 0 : 420);
   }
   function close() {
     if (!root || root.hidden) return;
@@ -543,6 +630,17 @@
     if (t.classList.contains('wa-float') && root && !root.hidden) { close(); return; }
     open(t.getAttribute('data-quickchat') || '');
   });
+  /** The chat opens by itself a moment after the first page is shown, once per visit: leads are the point.
+      It stays quiet for the rest of the visit once opened or closed, and after the visitor has sent an enquiry. */
+  function autoOpen() {
+    if (root && !root.hidden) return;
+    if (st.step === 'done' || PAGE === 'account' || document.body.classList.contains('modal-open')) return;
+    var a = document.activeElement;
+    if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;   // do not interrupt someone who is typing
+    try { if (sessionStorage.getItem(AUTO)) return; } catch (e) { return; }
+    open(PAGE === 'post' ? 'list' : '', true);
+  }
+  setTimeout(autoOpen, 3000);
   setTimeout(showTease, PAGE === 'post' ? 7000 : 9000);
 
   ST.quickChat = { open: open, close: close };

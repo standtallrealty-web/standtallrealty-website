@@ -60,11 +60,31 @@ window.ST_LOC = (function () {
     'Khadakwasla', 'Hingne Khurd', 'Anand Nagar', 'Dhankawadi', 'Sahakar Nagar', 'Parvati', 'Market Yard', 'Swargate', 'Mukund Nagar',
     'Salisbury Park', 'Gultekdi', 'Sadashiv Peth', 'Narayan Peth', 'Shaniwar Peth', 'Kasba Peth', 'Budhwar Peth', 'Raviwar Peth',
     'Shukrawar Peth', 'Guruwar Peth', 'Ganesh Peth', 'Nana Peth', 'Bhawani Peth', 'Rasta Peth', 'Somwar Peth', 'Mangalwar Peth',
-    'Dattawadi', 'Sopan Baug', 'Balaji Nagar', 'Loni Kalbhor', 'Theur', 'Shewalewadi', 'Kale Padal', 'Satavwadi', 'Sasane Nagar'];
+    'Dattawadi', 'Sopan Baug', 'Balaji Nagar', 'Loni Kalbhor', 'Theur', 'Shewalewadi', 'Kale Padal', 'Satavwadi', 'Sasane Nagar',
+    'Wanwadi', 'Range Hills', 'Wakadewadi', 'Aundh Road', 'Sanewadi', 'Sutarwadi', 'Sus Road', 'Pashan Sus Road', 'Chandani Chowk', 'Mayur Colony',
+    'Paud Road', 'Bhusari Colony', 'Hingne Budruk', 'Karve Road', 'Dahanukar Colony', 'Ideal Colony', 'Shivane', 'Uttam Nagar', 'NDA Road',
+    'Lavale', 'Bhilarewadi', 'Jambhulwadi', 'Kolewadi', 'Gujarwadi', 'Padmavati', 'Tilak Road', 'Navi Peth', 'Laxmi Road', 
+    'Ramwadi', 'Nagar Road', 'Airport Road', 'Bakori', 'Lonikand', 'Tadiwala Road', 'Boat Club Road', 'Sassoon Road', 'Ghorpade Peth',
+    'Pune Cantonment', 'Sade Satra Nali', 'Solapur Road', 'Bhosale Nagar', 'Aundh Gaon', 'Baner Gaon', 'Kondhwa Road', 'Khadi Machine Chowk', 'Kalas', 'Wadgaon Budruk'];
   L['Pimpri-Chinchwad'] = ['Wakad', 'Pimple Saudagar', 'Pimple Nilakh', 'Pimple Gurav', 'Pimpri', 'Chinchwad', 'Akurdi', 'Nigdi',
     'Pradhikaran', 'Ravet', 'Punawale', 'Tathawade', 'Thergaon', 'Rahatani', 'Kalewadi', 'Sangvi', 'New Sangvi', 'Dapodi', 'Kasarwadi',
     'Bhosari', 'Moshi', 'Chikhali', 'Charholi', 'Dighi', 'Dudulgaon', 'Talawade', 'Kiwale', 'Mamurdi', 'Gahunje', 'Dehu Road',
     'Chinchwad Gaon', 'Nehru Nagar', 'Indrayani Nagar', 'Spine Road', 'Wakad Road'];
+  // Pune by part of the city, for the "Other area" picker in the quick chat. Every locality above sits in exactly one part.
+  var puneZones = {
+    'Central Pune': ['Camp', 'Pune Station', 'Bund Garden', 'Sangamwadi', 'Shivaji Nagar', 'Deccan Gymkhana', 'FC Road', 'JM Road', 'Model Colony', 'Gokhale Nagar', 'Prabhat Road', 'Law College Road', 'Erandwane', 'Karve Road',
+      'Sadashiv Peth', 'Narayan Peth', 'Shaniwar Peth', 'Kasba Peth', 'Budhwar Peth', 'Raviwar Peth', 'Shukrawar Peth', 'Guruwar Peth', 'Ganesh Peth', 'Nana Peth', 'Bhawani Peth', 'Rasta Peth', 'Somwar Peth', 'Mangalwar Peth', 'Navi Peth',
+      'Laxmi Road', 'Tilak Road', 'Swargate', 'Market Yard', 'Gultekdi', 'Parvati', 'Sahakar Nagar', 'Dattawadi', 'Sopan Baug', 'Pune Cantonment', 'Wakadewadi', 'Sassoon Road', 'Boat Club Road', 'Ghorpade Peth', 'Mukund Nagar', 'Salisbury Park', 'Fatima Nagar', 'Padmavati'],
+    'East Pune': ['Koregaon Park', 'Tadiwala Road', 'Ghorpadi', 'Mundhwa', 'Keshav Nagar', 'Hadapsar', 'Magarpatta', 'Amanora', 'Ramtekdi', 'Ramwadi', 'Sade Satra Nali', 'Solapur Road', 'Kharadi', 'Chandan Nagar', 'Vadgaon Sheri', 'Nagar Road', 'Wagholi', 'Kesnand',
+      'Bakori', 'Lonikand', 'Manjri', 'Fursungi', 'Uruli Devachi', 'Loni Kalbhor', 'Theur', 'Shewalewadi', 'Kale Padal', 'Satavwadi', 'Sasane Nagar', 'Handewadi', 'Autadwadi Handewadi', 'Holkarwadi'],
+    'North Pune': ['Viman Nagar', 'Kalyani Nagar', 'Yerawada', 'Dhanori', 'Lohegaon', 'Vishrantwadi', 'Tingre Nagar', 'Kalas', 'Airport Road', 'Aundh', 'Aundh Road', 'Aundh Gaon', 'Sanewadi', 'Bopodi', 'Khadki', 'Range Hills', 'Bhosale Nagar'],
+    'West Pune': ['Kothrud', 'Karve Nagar', 'Warje', 'Bavdhan', 'Pashan', 'Sus', 'Sus Road', 'Pashan Sus Road', 'Sutarwadi', 'Chandani Chowk', 'Mahalunge', 'Baner', 'Baner Gaon', 'Balewadi', 'Hinjewadi', 'Hinjewadi Phase 1', 'Hinjewadi Phase 2', 'Hinjewadi Phase 3',
+      'Maan', 'Marunji', 'Bhugaon', 'Bhukum', 'Pirangut', 'Lavale', 'Mayur Colony', 'Paud Road', 'Bhusari Colony', 'Dahanukar Colony', 'Ideal Colony', 'Shivane', 'Uttam Nagar', 'NDA Road'],
+    'South Pune': ['NIBM', 'NIBM Annexe', 'NIBM Road', 'Kondhwa', 'Kondhwa Budruk', 'Kondhwa Khurd', 'Kondhwa Road', 'Undri', 'Parge Nagar', 'Kausar Baug', 'Lulla Nagar', 'Wanowrie', 'Wanwadi', 'Salunke Vihar', 'Mohammadwadi', 'Pisoli', 'Khadi Machine Chowk',
+      'Bibwewadi', 'Upper Indira Nagar', 'Gangadham', 'Katraj', 'Yewalewadi', 'Mitha Nagar', 'Shivneri Nagar', 'Bhagyoday Nagar', 'Tilekar Nagar', 'Ambegaon Budruk', 'Ambegaon Khurd', 'Nanded City', 'Kirkatwadi', 'Khadakwasla', 'Hingne Khurd', 'Hingne Budruk',
+      'Anand Nagar', 'Dhankawadi', 'Balaji Nagar', 'Dhayari', 'Narhe', 'Vadgaon Budruk', 'Wadgaon Budruk', 'Sinhagad Road', 'Bhilarewadi', 'Jambhulwadi', 'Kolewadi', 'Gujarwadi'],
+    'Pimpri-Chinchwad': L['Pimpri-Chinchwad']
+  };
   L['Mumbai'] = ['Colaba', 'Cuffe Parade', 'Nariman Point', 'Fort', 'Churchgate', 'Marine Lines', 'Girgaon', 'Charni Road', 'Grant Road',
     'Malabar Hill', 'Walkeshwar', 'Peddar Road', 'Breach Candy', 'Napean Sea Road', 'Tardeo', 'Mumbai Central', 'Byculla', 'Mazgaon',
     'Agripada', 'Mahalaxmi', 'Worli', 'Lower Parel', 'Parel', 'Lalbaug', 'Sewri', 'Wadala', 'Prabhadevi', 'Dadar East', 'Dadar West',
@@ -140,5 +160,5 @@ window.ST_LOC = (function () {
     return '';
   }
   function districtOf(city) { return cityDistrict[city] || ''; }
-  return { states: states, districts: districts, localities: L, popular: popular, districtOf: districtOf, matchCity: matchCity, matchLocality: matchLocality };
+  return { puneZones: puneZones, states: states, districts: districts, localities: L, popular: popular, districtOf: districtOf, matchCity: matchCity, matchLocality: matchLocality };
 })();
