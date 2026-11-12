@@ -32,6 +32,8 @@ window.SITE = {
   approvalTime: 'within 24 hours',
   defaultCity: 'Pune',
   focusAreas: ['Baner', 'Wakad', 'Hinjewadi', 'Kothrud', 'Kharadi', 'Viman Nagar', 'Wagholi', 'Hadapsar', 'Kondhwa', 'NIBM', 'Undri', 'Wanowrie'],
+  // Areas offered as quick answers in the website chat (green WhatsApp button), in this order
+  chatAreas: ['Kondhwa', 'NIBM', 'Undri', 'Wanowrie', 'Hadapsar', 'Kharadi', 'Baner', 'Wakad'],
 
   // Ads tracking (optional): paste IDs to measure leads from Facebook / Google ads
   metaPixelId: '',

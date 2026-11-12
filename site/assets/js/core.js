@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611121619';
+  var VER = '202611122329';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -41,6 +41,24 @@
     return '₹' + n.toLocaleString('en-IN');
   }
   function rupees(n) { n = Number(n || 0); return n ? '₹' + n.toLocaleString('en-IN') : ''; }
+  /** Reads an amount the way people type it: "85 lakh", "1.2 Cr", "85L", "₹85,00,000", "25k", "25000".
+   *  A bare number is read as lakh/crore for a sale price (85 → 85 lakh, 1.2 → 1.2 crore) and as rupees,
+   *  or thousands when small, for a rent (25 → 25,000). Returns 0 when it cannot tell. */
+  function parseAmount(text, rent) {
+    var t = String(text || '').toLowerCase().replace(/,/g, '').replace(/₹|\brs\.?|\binr\b|\/-/g, ' ');
+    var m = t.match(/(\d+(?:\.\d+)?)\s*(crores?|cr|c|lakhs?|lacs?|lac|lk|l|thousand|k)?\b/);
+    if (!m) return 0;
+    var n = parseFloat(m[1]), u = m[2] || '';
+    if (/^c/.test(u)) n *= 1e7;
+    else if (/^l/.test(u)) n *= 1e5;
+    else if (/^(k|thousand)/.test(u)) n *= 1e3;
+    else if (rent) { if (n < 1000) n *= 1e3; }
+    else if (n < 10) n *= 1e7;
+    else if (n < 1000) n *= 1e5;
+    else if (n < 100000) return 0;
+    n = Math.round(n);
+    return rent ? (n >= 1000 && n <= 5e7 ? n : 0) : (n >= 1e5 && n <= 5e9 ? n : 0);
+  }
   function priceLabel(l) {
     if (l.purpose === 'rent') return l.rent ? rupees(l.rent) : 'Rent on request';
     if (!l.price) return 'Price on request';
@@ -482,6 +500,7 @@
     share: '<path d="M18 16a3 3 0 0 0-2.4 1.2l-6.7-3.4a3 3 0 0 0 0-1.6l6.7-3.4A3 3 0 1 0 15 7l-6.7 3.4a3 3 0 1 0 0 3.2L15 17a3 3 0 1 0 3-1z"/>',
     arrowLeft: '<path d="M10.8 5.6L12.2 7l-4 4H20v2H8.2l4 4-1.4 1.4L4.4 12z"/>',
     send: '<path d="M3 20.5V14l9-2-9-2V3.5L22 12z"/>',
+    redo: '<path d="M12 5V1.5L7 6l5 4.5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/>',
     plus: '<path d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z"/>',
     star: '<path d="M12 3l2.6 5.6 6.1.6-4.6 4.1 1.3 6-5.4-3.1-5.4 3.1 1.3-6-4.6-4.1 6.1-.6z"/>',
     insta: '<path d="M8 3h8a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H8zm4 3.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zm0 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM17 6.3a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>',
@@ -1005,7 +1024,8 @@
     photoUrl: photoUrl, imgTag: imgTag, Saved: Saved, card: card, getListings: getListings, setBadge: setBadge, refreshUnread: refreshUnread,
     detectLocation: detectLocation, reverseGeocode: reverseGeocode, distanceKm: distanceKm, cityOptions: cityOptions, fillLocalities: fillLocalities,
     locationPicker: locationPicker, compressImage: compressImage, leadForm: leadForm, openEnquiry: openEnquiry, INTENTS: INTENTS, otpBox: otpBox, siteConfig: siteConfig,
-    BUY_BUDGETS: BUY_BUDGETS, RENT_BUDGETS: RENT_BUDGETS, budgetOptions: budgetOptions, inBudget: inBudget, track: track, leadSource: leadSource, initials: initials
+    BUY_BUDGETS: BUY_BUDGETS, RENT_BUDGETS: RENT_BUDGETS, BUDGET_SALE: BUDGET_SALE, BUDGET_RENT: BUDGET_RENT, budgetOptions: budgetOptions, inBudget: inBudget,
+    track: track, leadSource: leadSource, initials: initials, parseAmount: parseAmount
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

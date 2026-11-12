@@ -237,5 +237,5 @@
   if (!id) { fail({ code: 'NOT_FOUND' }); return; }
   var payload = { id: id };
   if (ST.Admin.token()) payload.adminToken = ST.Admin.token();
-  ST.api('listing', payload).then(function (l) { L = l; render(); }).catch(fail);
+  ST.api('listing', payload).then(function (l) { L = l; ST.currentListing = l; render(); }).catch(fail);
 })();

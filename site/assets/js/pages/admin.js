@@ -45,7 +45,7 @@
     renderTabs();
     var r = cur();
     window.scrollTo(0, 0);
-    ({ overview: overview, pending: function () { listingsView(true); }, listings: function () { listingsView(false); }, add: function () { editor(''); },
+    ({ overview: overview, pending: function () { listingsView(true); }, listings: function () { listingsView(false); }, add: function () { editor('', r.arg); },
       edit: function () { editor(r.arg); }, import: importView, leads: function () { leadsView(r.arg); }, chats: chatsView, users: usersView }[r.tab] || overview)();
   }
   window.addEventListener('hashchange', function () { if (ST.Admin.token()) route(); });
@@ -150,24 +150,86 @@
   }
 
   // ---------- add / edit listing
-  function editor(id) {
-    root.innerHTML = '<h1 style="font-size:28px">' + (id ? 'Edit ' + esc(id) : 'Add a listing') + '</h1><p class="muted">' + (id ? 'Changes go live as soon as you save.' : 'Your own projects, rentals and resale properties. They go live immediately unless you set the status to Pending.') + '</p>' +
-      (id ? '' : '<p><a href="#import">' + icon('plus') + ' Import projects we prepared for you</a></p>') +
+  function editor(id, fromLead) {
+    fromLead = id ? '' : decodeURIComponent(fromLead || '');
+    root.innerHTML = '<h1 style="font-size:28px">' + (id ? 'Edit ' + esc(id) : fromLead ? 'Create a listing from enquiry ' + esc(fromLead) : 'Add a listing') + '</h1><p class="muted">' +
+      (id ? 'Changes go live as soon as you save.' : fromLead ? 'We filled in what the owner told us. Check the details, add the photos they sent on WhatsApp, then publish.' : 'Your own projects, rentals and resale properties. They go live immediately unless you set the status to Pending.') + '</p>' +
+      (id || fromLead ? '' : '<p><a href="#import">' + icon('plus') + ' Import projects we prepared for you</a></p>') +
       '<div class="post-card"><div id="alf"><div class="skeleton" style="min-height:300px"></div></div><div class="wiz-nav"><a class="btn btn-ghost" href="#listings">Cancel</a><button class="btn btn-gold" type="button" id="asave">' + (id ? 'Save changes' : 'Publish listing') + '</button></div></div>';
-    var p = id ? loadListings(!listingsCache).then(function (all) { return all.filter(function (x) { return x.id === id; })[0]; }) : Promise.resolve(null);
+    var lead = null;
+    var p = id ? loadListings(!listingsCache).then(function (all) { return all.filter(function (x) { return x.id === id; })[0]; }) :
+      fromLead ? (leadsCache ? Promise.resolve(leadsCache) : loadLeads()).then(function () { lead = leadById(fromLead); return lead ? draftFromLead(lead) : null; }) : Promise.resolve(null);
     p.then(function (l) {
       if (id && !l) { root.innerHTML = '<div class="empty"><h3>Listing not found</h3><a class="btn btn-ghost" href="#listings">Back to listings</a></div>'; return; }
+      if (fromLead && !lead) { root.innerHTML = '<div class="empty"><h3>Enquiry not found</h3><p>It may have been deleted.</p><a class="btn btn-ghost" href="#leads">Back to leads</a></div>'; return; }
       var lf = window.ListingForm.mount($('#alf'), { mode: 'admin', listing: l });
       $('#asave').addEventListener('click', function () {
         var b = this;
         for (var s = 1; s <= 3; s++) { var err = lf.stepErrors(s); if (err) { ST.toast(err, 'error'); return; } }
         ST.busy(b, true, 'Saving…');
         lf.uploadPending(function (i, n) { b.textContent = 'Uploading photo ' + i + ' of ' + n + '…'; })
-          .then(function () { return ST.api('adminSaveListing', { id: id || undefined, listing: lf.collect() }); })
-          .then(function (r) { ST.toast((id ? 'Saved ' : 'Published ') + r.id + '.', 'ok'); listingsCache = null; refreshOverview(); location.hash = '#listings'; })
+          .then(function () { var data = lf.collect(); return ST.api('adminSaveListing', { id: id || undefined, listing: data }).then(function (r) { r.data = data; return r; }); })
+          .then(function (r) {
+            listingsCache = null; refreshOverview();
+            if (!lead) { ST.toast((id ? 'Saved ' : 'Published ') + r.id + '.', 'ok'); location.hash = '#listings'; return; }
+            var note = (lead.notes ? lead.notes + ' · ' : '') + 'Listed as ' + r.id;
+            ST.api('adminUpdateLead', Object.assign({ id: lead.id, notes: note }, lead.status === 'New' ? { status: 'Contacted' } : {}))
+              .then(function () { lead.notes = note; if (lead.status === 'New') lead.status = 'Contacted'; }).catch(function () {});
+            location.hash = '#listings';
+            listedModal(lead, r.id, r.data);
+          })
           .catch(function (err) { ST.busy(b, false); ST.toast(err.message, 'error'); });
       });
     }).catch(handleErr);
+  }
+
+  // ---------- listings from owner enquiries (website chat or form)
+  var OWNER_INTENTS = ['Sell my property', 'Rent out my property', 'Sell a plot / land'];
+  function isOwnerLead(l) {
+    return OWNER_INTENTS.indexOf(l.intent) >= 0 || (/^Commercial/.test(l.intent || '') && /Wants to: (Sell|Rent out)/.test(l.details || ''));
+  }
+  /** Reads "Key: value | Key: value" enquiry details into a listing draft for the form. */
+  function draftFromLead(l) {
+    var f = {};
+    String(l.details || '').split(/\s*\|\s*/).forEach(function (part) {
+      var i = part.indexOf(':'); if (i > 0) f[part.slice(0, i).trim().toLowerCase()] = part.slice(i + 1).trim();
+    });
+    var rent = /Rent out/.test(l.intent) || /^rent/i.test(f['for'] || '') || /Rent out/.test(f['wants to'] || '');
+    var type = f.type || '';
+    var cat = /plot|land/i.test(type) || /plot/i.test(l.intent) ? 'Plot' : /shop|office|showroom|warehouse|godown/i.test(type) || /^Commercial/.test(l.intent) ? 'Commercial' : 'Residential';
+    var ptype = cat === 'Plot' ? (/agri/i.test(type) ? 'Agricultural land' : /commercial/i.test(type) ? 'Commercial plot' : /industrial/i.test(type) ? 'Industrial plot' : /\bNA\b/.test(type) ? 'NA plot' : 'Residential plot') :
+      cat === 'Commercial' ? (/showroom/i.test(type) ? 'Showroom' : /warehouse|godown/i.test(type) ? 'Warehouse / Godown' : /office/i.test(type) && !/shop/i.test(type) ? 'Office space' : 'Shop') :
+      /bungalow|villa|independent/i.test(type) ? 'Independent house / Bungalow' : /row/i.test(type) ? 'Row house' : /penthouse/i.test(type) ? 'Penthouse' : 'Apartment / Flat';
+    var bt = f.bhk || f.size || '', bm = bt.match(/(\d+(?:\.5)?)\s*\+?\s*BHK/i);
+    var bhk = /1\s*RK/i.test(bt) ? '1 RK' : bm ? (parseFloat(bm[1]) >= 5 ? '5+' : bm[1]) : '';
+    var st = f['carpet area'] || f['plot size'] || (bhk ? '' : f.size) || '';
+    var sm = st.replace(/,/g, '').match(/(\d+(?:\.\d+)?)\s*(sq\.?\s*ft|sqft|sq\.?\s*yd|sq\.?\s*m|guntha|acres?|hectares?)?/i);
+    var u = sm && sm[2] ? sm[2].toLowerCase().replace(/[\s.]/g, '') : '';
+    var unit = /guntha/.test(u) ? 'guntha' : /acre/.test(u) ? 'acre' : /hect/.test(u) ? 'hectare' : /yd/.test(u) ? 'sq yd' : u === 'sqm' ? 'sq m' : 'sq ft';
+    var amount = ST.parseAmount(f['expected price'] || f['expected rent'] || f.expected || '', rent);
+    var area = f.area || '';
+    var furn = { 'fully furnished': 'Fully furnished', 'semi furnished': 'Semi furnished', 'unfurnished': 'Unfurnished' }[String(f.furnishing || '').toLowerCase()] || '';
+    var what = cat === 'Residential' ? ({ 'Apartment / Flat': 'flat', 'Independent house / Bungalow': 'bungalow', 'Row house': 'row house', 'Penthouse': 'penthouse' }[ptype] || 'home') : ptype.toLowerCase();
+    var title = [bhk ? (bhk === '1 RK' ? '1 RK' : bhk + ' BHK') : '', what, rent ? 'for rent' : 'for sale', area ? 'in ' + area : ''].filter(Boolean).join(' ');
+    var d = {
+      purpose: rent ? 'rent' : 'sale', category: cat, propertyType: ptype, kind: 'property', bhk: bhk, carpetArea: sm ? sm[1] : '', areaUnit: unit,
+      furnishing: furn, state: 'Maharashtra', city: 'Pune', locality: area, status: 'Approved',
+      title: title.charAt(0).toUpperCase() + title.slice(1),
+      description: title.charAt(0).toUpperCase() + title.slice(1) + ', Pune.' + (st ? ' Area ' + st + '.' : '') + (furn ? ' ' + furn + '.' : ''),
+      adminNotes: 'Owner: ' + l.name + ', ' + ST.fmtPhone(l.phone) + (f.society ? '. Society: ' + f.society : '') + '. From enquiry ' + l.id + (l.source ? ' (' + l.source + ')' : '') + '.'
+    };
+    if (amount) d[rent ? 'rent' : 'price'] = String(amount);
+    return d;
+  }
+  function listedModal(lead, id, data) {
+    var live = !data || !data.status || data.status === 'Approved', first = String(lead.name || '').split(' ')[0];
+    var url = ST.absUrl(ST.listingUrl(id));
+    var text = 'Hi ' + first + ', your ' + (data && data.title ? data.title.charAt(0).toLowerCase() + data.title.slice(1) : 'property') + ' is now live on Stand Tall Realty: ' + url + ' Share it with anyone who may be interested.';
+    var m = ST.openModal({ title: live ? 'Listing is live' : 'Listing saved', size: 'sm', body: '<div class="stack"><p style="margin:0">' +
+      (live ? esc(id) + ' is live on the website. Let ' + esc(first) + ' know, so they can share it too.' : esc(id) + ' is saved as ' + esc(data.status) + '. Visitors will see it after you approve it.') + '</p>' +
+      (live ? '<a class="btn btn-wa btn-block" target="_blank" rel="noopener" href="' + esc(ST.wa(text, lead.phone)) + '">' + icon('wa') + 'Send the link to ' + esc(first) + ' on WhatsApp</a>' : '') +
+      '<button type="button" class="btn btn-ghost btn-block" data-ok>Done</button></div>' });
+    $('[data-ok]', m.el).onclick = function () { m.close(); };
   }
 
   // ---------- import prepared projects (assets/projects/import.json, added as Pending)
@@ -216,7 +278,7 @@
   var LEAD_ST = ['New', 'Contacted', 'Site visit', 'Negotiation', 'Closed', 'Not interested'];
   var LEAD_INTENTS = ['Buy a property', 'Take a property on rent', 'Sell my property', 'Rent out my property', 'Buy a plot / land', 'Sell a plot / land',
     'Commercial – buy / rent / lease', 'New project / investment', 'Other'];
-  var LEAD_SOURCES = ['Walk-in', 'Phone call', 'WhatsApp', 'Instagram', 'Facebook', 'YouTube', 'OLX', 'Referral', 'Other'];
+  var LEAD_SOURCES = ['Walk-in', 'Phone call', 'WhatsApp', 'Website chat', 'Instagram', 'Facebook', 'YouTube', 'OLX', 'Referral', 'Other'];
   var sel = {};   // selected lead ids
   function endOfToday() { var d = new Date(); d.setHours(23, 59, 59, 999); return d.getTime(); }
   function isOpen(l) { return l.status !== 'Closed' && l.status !== 'Not interested'; }
@@ -287,6 +349,7 @@
         (l.listingId ? '<br>Property: <a href="property.html?id=' + encodeURIComponent(l.listingId) + '" target="_blank" rel="noopener">' + esc(l.listingId + ' – ' + l.listingTitle) + '</a>' : '') +
         '<br><span class="small muted">Came from: ' + esc(l.source || 'website') + (l.page && l.page !== 'admin' ? ', page ' + esc(l.page) : '') + '</span></div>' +
         '<div class="lead-row"><label class="sr-only">Status</label><select data-lst>' + LEAD_ST.map(function (s) { return '<option' + (s === l.status ? ' selected' : '') + '>' + s + '</option>'; }).join('') + '</select><input data-lnote placeholder="Add a note, e.g. visit fixed for Sunday" value="' + esc(l.notes) + '">' +
+        (isOwnerLead(l) ? '<button class="btn btn-gold btn-sm" type="button" data-lact="list">' + icon('plus') + 'Create listing</button>' : '') +
         '<button class="btn btn-ghost btn-sm" type="button" data-lact="edit">Edit</button><button class="btn btn-ghost btn-sm" type="button" data-lact="followup">' + icon('calendar') + (l.followUpAt ? 'Change follow-up' : 'Set follow-up') + '</button><button class="btn btn-ghost btn-sm lead-del" type="button" data-lact="del">Delete</button></div></article>';
     }).join('') : '<div class="empty"><h3>' + (leadsCache.length ? 'No leads match' : 'No leads yet') + '</h3><p>' + (leadsCache.length ? 'Change the filters above to see more.' : 'Enquiries from the website appear here. Tap Add lead to enter walk-ins and phone calls.') + '</p></div>';
   }
@@ -378,6 +441,7 @@
     if (!l) return;
     if (a.dataset.lact === 'edit') leadModal(l);
     if (a.dataset.lact === 'followup') leadModal(l, 'followup');
+    if (a.dataset.lact === 'list') location.hash = '#add=' + encodeURIComponent(l.id);
     if (a.dataset.lact === 'del') {
       ST.confirmBox('Delete this lead?', l.name + ' (' + ST.fmtPhone(l.phone) + ') will be removed from the admin panel and your Google Sheet. This cannot be undone.', 'Delete', true).then(function (yes) {
         if (!yes) return;
