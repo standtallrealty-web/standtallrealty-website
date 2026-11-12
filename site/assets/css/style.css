@@ -382,6 +382,7 @@ body.modal-open { overflow: hidden; }
 .area-list-sec { padding-top: 40px; }
 .area-tabs { max-width: 560px; }
 .area-tabs small { font-weight: 500; color: var(--muted); }
+.area-tabs button { white-space: nowrap; padding: 9px 6px; }
 .area-near-h { margin: 26px 0 8px; font-size: 18px; }
 .area-near a { font-size: 15px; padding: 6px 14px; }
 .area-faq, .area-lead-sec { padding-top: 0; }
@@ -729,6 +730,7 @@ body.modal-open { overflow: hidden; }
   .search-card { padding: 4px 14px 16px; }
   .search-tabs button { padding: 13px 9px 11px; font-size: 14.5px; }
   .tab-long { display: none; } .tab-short { display: inline; }
+  .area-tabs button { font-size: 14px; }
   .search-row { grid-template-columns: minmax(0, 1fr); }
   .segments { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .segments a { border-left: 0; border-top: 1px solid var(--line); padding: 16px 14px; }

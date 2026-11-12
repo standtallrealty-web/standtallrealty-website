@@ -1,5 +1,5 @@
 /* DEMO MODE ONLY — runs the real backend code inside your browser so the site can be tried before the
-   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611121442. */
+   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611121452. */
 /*
  * Minimal Google Apps Script runtime emulator.
  * Used (1) by the automated tests in Node and (2) by the website's demo mode in the browser,
