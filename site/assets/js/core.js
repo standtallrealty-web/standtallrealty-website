@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611121316';
+  var VER = '202611121442';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -853,7 +853,10 @@
       '<datalist id="lead-areas">' + (S.focusAreas || []).concat((LOC.localities.Pune || []).slice(0, 80)).filter(function (x, i, a) { return a.indexOf(x) === i; }).map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>' +
       '</form>';
     var form = $('form', el), box = $('.intent-fields', form);
-    function show(intent) { box.innerHTML = intentFields(intent); box.hidden = !box.innerHTML; }
+    function show(intent) {
+      box.innerHTML = intentFields(intent); box.hidden = !box.innerHTML;
+      var ar = opts.area && $('input[name=area]', box); if (ar) ar.value = opts.area;
+    }
     show(start);
     form.addEventListener('change', function (e) { if (e.target.name === 'intent') show(e.target.value); });
     var u = Auth.user();

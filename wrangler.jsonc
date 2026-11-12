@@ -1,9 +1,27 @@
-// Cloudflare deploy settings: serves the static website in ./site (no build step needed).
+// Cloudflare deploy settings: static site in ./site plus a small Worker (worker/index.mjs)
+// for clean URLs, Google-readable property pages, area page listings and the live sitemap.
 {
   "name": "standtallrealty-website",
   "compatibility_date": "2025-09-01",
+  "main": "worker/index.mjs",
   "assets": {
     "directory": "./site",
-    "not_found_handling": "404-page"
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": [
+      "/property",
+      "/property-in-*",
+      "/sitemap.xml",
+      "/account.html",
+      "/admin.html",
+      "/chats.html",
+      "/contact.html",
+      "/index.html",
+      "/post-property.html",
+      "/privacy.html",
+      "/properties.html",
+      "/property.html",
+      "/terms.html"
+    ]
   }
 }

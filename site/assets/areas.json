@@ -1,0 +1,116 @@
+[
+ {
+  "slug": "kondhwa",
+  "name": "Kondhwa",
+  "url": "property-in-kondhwa-pune",
+  "match": [
+   "Kondhwa",
+   "Kausar Baug",
+   "Parge Nagar",
+   "Lulla Nagar"
+  ]
+ },
+ {
+  "slug": "nibm-road",
+  "name": "NIBM Road",
+  "url": "property-in-nibm-road-pune",
+  "match": [
+   "NIBM",
+   "Mohammadwadi"
+  ]
+ },
+ {
+  "slug": "undri",
+  "name": "Undri",
+  "url": "property-in-undri-pune",
+  "match": [
+   "Undri",
+   "Pisoli",
+   "Handewadi"
+  ]
+ },
+ {
+  "slug": "wanowrie",
+  "name": "Wanowrie",
+  "url": "property-in-wanowrie-pune",
+  "match": [
+   "Wanowrie",
+   "Salunke Vihar",
+   "Fatima Nagar"
+  ]
+ },
+ {
+  "slug": "hadapsar",
+  "name": "Hadapsar",
+  "url": "property-in-hadapsar-pune",
+  "match": [
+   "Hadapsar",
+   "Magarpatta",
+   "Manjri"
+  ]
+ },
+ {
+  "slug": "kharadi",
+  "name": "Kharadi",
+  "url": "property-in-kharadi-pune",
+  "match": [
+   "Kharadi"
+  ]
+ },
+ {
+  "slug": "viman-nagar",
+  "name": "Viman Nagar",
+  "url": "property-in-viman-nagar-pune",
+  "match": [
+   "Viman Nagar"
+  ]
+ },
+ {
+  "slug": "wagholi",
+  "name": "Wagholi",
+  "url": "property-in-wagholi-pune",
+  "match": [
+   "Wagholi",
+   "Kesnand"
+  ]
+ },
+ {
+  "slug": "baner",
+  "name": "Baner",
+  "url": "property-in-baner-pune",
+  "match": [
+   "Baner",
+   "Balewadi"
+  ]
+ },
+ {
+  "slug": "wakad",
+  "name": "Wakad",
+  "url": "property-in-wakad-pune",
+  "match": [
+   "Wakad",
+   "Punawale",
+   "Tathawade"
+  ]
+ },
+ {
+  "slug": "hinjewadi",
+  "name": "Hinjewadi",
+  "url": "property-in-hinjewadi-pune",
+  "match": [
+   "Hinjewadi",
+   "Maan",
+   "Marunji"
+  ]
+ },
+ {
+  "slug": "kothrud",
+  "name": "Kothrud",
+  "url": "property-in-kothrud-pune",
+  "match": [
+   "Kothrud",
+   "Karve Nagar",
+   "Erandwane"
+  ]
+ }
+]
