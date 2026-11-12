@@ -14,10 +14,10 @@ window.SITE = {
   // Main number for Call + WhatsApp buttons (10 digits)
   phone: '9920079048',
   whatsapp: '9920079048',
-  // People shown on the Contact page and footer
+  // Company numbers shown on the Contact page (with a role label, no personal names)
   contacts: [
-    { name: 'Kafil Shaikh', phone: '9920079048' },
-    { name: 'Shahzeb Inamdar', phone: '9822033795' }
+    { label: 'Property consultant', phone: '9920079048' },
+    { label: 'Enquiries & site visits', phone: '9822033795' }
   ],
   email: 'shahzebinamdar@standtallrealty.com',   // shown on the Contact page and footer (leave empty to hide)
   address: 'Unity Splendour, Salunke Vihar Rd, Borade Nagar, Wanowrie, Pune, Maharashtra 411040',
