@@ -22,7 +22,7 @@ window.SITE = {
   email: 'shahzebinamdar@standtallrealty.com',   // shown on the Contact page and footer (leave empty to hide)
   address: 'Unity Splendour, Salunke Vihar Rd, Borade Nagar, Wanowrie, Pune, Maharashtra 411040',
   mapQuery: 'Unity Splendour, Salunke Vihar Road, Borade Nagar, Wanowrie, Pune 411040',
-  hours: 'Mon–Sat, 10:00 am – 7:30 pm',
+  hours: 'Open all 7 days, 10:00 am – 7:30 pm',
 
   instagram: 'standtallrealty',   // handle only
   facebook: '',                   // full page URL (optional)
