@@ -1,5 +1,5 @@
 /* DEMO MODE ONLY — runs the real backend code inside your browser so the site can be tried before the
-   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611121609. */
+   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611121619. */
 /*
  * Minimal Google Apps Script runtime emulator.
  * Used (1) by the automated tests in Node and (2) by the website's demo mode in the browser,
@@ -474,7 +474,7 @@ function setup() {
   rememberSettings_();
   var ss = ss_();
   if (!setting_('ADMIN_PASSWORD', ADMIN_PASSWORD)) Logger.log('⚠️ Type an admin password in ADMIN_PASSWORD (Code.gs settings), Save, and run setup again.');
-  Logger.log(ensureFollowUpTrigger_() ? '✅ Follow-up email reminders are on (checked every 5 minutes).' : '⚠️ Could not switch on follow-up reminders. Run setup again and allow access.');
+  Logger.log(ensureFollowUpTrigger_() ? '✅ Follow-up email reminders are on (checked every minute).' : '⚠️ Could not switch on follow-up reminders. Run setup again and allow access.');
   Logger.log('✅ Setup complete. Sheet: ' + ss.getUrl());
   Logger.log('Next: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).');
 }
@@ -1989,6 +1989,7 @@ function adminSaveLead_(b) {
     id = lead.id;
     if (status && status !== 'New') updateRow_('Leads', findRow_('Leads', id), { status: status });
   }
+  if (out.followUpAt) noteFollowUp_(out.followUpAt.getTime());
   var reminders = out.followUpAt ? ensureFollowUpTrigger_() : null;
   return { id: id, reminders: reminders };
 }
@@ -2004,23 +2005,41 @@ function adminDeleteLeads_(b) {
 }
 
 // ------------------------------ follow-up reminders (email) ------------------------------
-var FOLLOWUP_EVERY_MIN = 5;
+var FOLLOWUP_EVERY_MIN = 1;                  // the reminder check runs every minute...
+var FOLLOWUP_EARLY_MS = 30000;               // ...sends up to 30 seconds early, so a reminder is at most about a minute late
+var FOLLOWUP_FULL_CHECK_MS = 15 * 60000;     // and looks at every lead at least every 15 minutes (catches edits made in the Sheet)
 
-/** Time trigger, every 5 minutes: emails a reminder for each lead whose follow-up time has come. */
+/** Time trigger, every minute: emails a reminder for each lead whose follow-up time has come.
+ *  Stays cheap: it only reads the Leads sheet when the next saved follow-up time is near. */
 function checkFollowUps() {
+  var props = PropertiesService.getScriptProperties(), now = Date.now();
+  var next = Number(props.getProperty('FU_NEXT')) || 0, last = Number(props.getProperty('FU_CHECKED')) || 0;
+  if ((!next || next > now + FOLLOWUP_EARLY_MS) && now - last < FOLLOWUP_FULL_CHECK_MS) return 0;
   REQ = { memo: {}, now: new Date() };
   var lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) return 0;
-  var sent = 0;
+  var sent = 0, nextDue = 0;
+  var later = function (t) { if (!nextDue || t < nextDue) nextDue = t; };
   try {
-    var soon = Date.now() + 2 * 60000;   // up to 2 minutes early, so it is never more than ~3 minutes late
+    var soon = Date.now() + FOLLOWUP_EARLY_MS;
     readAll_('Leads').rows.forEach(function (r) {
       var t = ms_(r.followUpAt);
-      if (!t || t > soon || ms_(r.remindedAt) || r.status === 'Closed' || r.status === 'Not interested' || sent >= 20) return;
+      if (!t || ms_(r.remindedAt) || r.status === 'Closed' || r.status === 'Not interested') return;
+      if (t > soon || sent >= 20) return later(t);                        // not yet, or the rest go on the next run
       if (sendFollowUpMail_(r)) { updateRow_('Leads', r._row, { remindedAt: new Date() }); sent++; }
+      else later(Date.now() + 10 * 60000);                                // email failed (daily limit?): try again in 10 minutes
     });
+    if (nextDue) props.setProperty('FU_NEXT', String(nextDue)); else props.deleteProperty('FU_NEXT');
+    props.setProperty('FU_CHECKED', String(Date.now()));
   } finally { lock.releaseLock(); }
   return sent;
+}
+
+/** A follow-up time was saved: make sure the minute check looks at it in time. */
+function noteFollowUp_(t) {
+  if (!t) return;
+  var props = PropertiesService.getScriptProperties(), next = Number(props.getProperty('FU_NEXT')) || 0;
+  if (!next || t < next) props.setProperty('FU_NEXT', String(t));
 }
 
 function sendFollowUpMail_(r) {
@@ -2041,7 +2060,7 @@ function sendFollowUpMail_(r) {
   } catch (e) { return false; }
 }
 
-/** Makes sure the 5-minute reminder check is installed (once). Needs permission the first time setup runs. */
+/** Makes sure the every-minute reminder check is installed (once). Needs permission the first time setup runs. */
 function ensureFollowUpTrigger_() {
   try {
     var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'checkFollowUps'; });
