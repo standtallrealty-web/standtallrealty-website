@@ -59,6 +59,9 @@
     var highlights = String(L.highlights || '').split('\n').filter(Boolean).map(function (h) { return '<li>' + icon('check') + '<span>' + esc(h) + '</span></li>'; }).join('');
     var amen = String(L.amenities || '').split(',').map(function (a) { return a.trim(); }).filter(Boolean).map(function (a) { return '<span>' + esc(a) + '</span>'; }).join('');
     var q = L.lat && L.lng ? L.lat + ',' + L.lng : [L.landmark, L.locality, L.city, L.state].filter(Boolean).join(', ');
+    var isProject = L.kind === 'project' && L.isFirm;
+    var brochureBand = isProject ? '<div class="brochure-band"><div><h2>Brochure, floor plans and price sheet</h2><p>We send the latest ones from the developer on WhatsApp.</p></div>' +
+      '<button class="btn btn-gold" type="button" data-brochure>' + icon('doc') + 'Get them on WhatsApp</button></div>' : '';
     var yt = ytId(L.videoUrl);
     var video = yt ? '<div class="video-wrap"><iframe src="https://www.youtube-nocookie.com/embed/' + yt + '" title="Property video" loading="lazy" allowfullscreen></iframe></div>' :
       (L.videoUrl ? '<a class="btn btn-ghost" href="' + esc(L.videoUrl) + '" target="_blank" rel="noopener">Watch the video tour</a>' : '');
@@ -67,12 +70,13 @@
       '<nav class="crumbs" aria-label="Breadcrumb" style="color:var(--muted)"><a href="index.html" style="color:var(--muted)">Home</a> / <a style="color:var(--muted)" href="properties.html?city=' + encodeURIComponent(L.city) + '">' + esc(L.city) + '</a> / <a style="color:var(--muted)" href="properties.html?city=' + encodeURIComponent(L.city) + '&loc=' + encodeURIComponent(L.locality) + '">' + esc(L.locality) + '</a> / ' + esc(L.id) + '</nav>' +
       '<div class="pd-top"><div><h1>' + esc(L.title) + '</h1><p class="pd-loc">' + icon('pin') + esc([L.landmark, L.locality, L.city].filter(Boolean).join(', ')) + '</p></div>' +
       '<div class="pd-actions"><button class="btn btn-ghost" type="button" id="share">' + icon('share') + 'Share</button><button class="btn btn-ghost" type="button" data-save="' + esc(L.id) + '" data-label="1" aria-pressed="' + ST.Saved.has(L.id) + '">' + icon(ST.Saved.has(L.id) ? 'heart' : 'heartOutline') + '<span>' + (ST.Saved.has(L.id) ? 'Saved' : 'Save') + '</span></button></div></div>' +
+      ST.reraBox(L, 'top') +
       '<div class="pd-grid"><div>' +
       '<div class="gallery"><div class="gallery-main" id="g-main"></div>' + (photos.length > 1 ? '<button class="gallery-nav prev" type="button" aria-label="Previous photo">' + icon('arrowLeft') + '</button><button class="gallery-nav next" type="button" aria-label="Next photo">' + icon('arrowLeft') + '</button><span class="gallery-count" id="g-count"></span>' : '') + '</div>' +
       (photos.length > 1 ? '<div class="thumbs" id="thumbs">' + photos.map(function (p, i) { return '<button type="button" data-i="' + i + '" aria-label="Photo ' + (i + 1) + '">' + ST.imgTag(p, 240, '') + '</button>'; }).join('') + '</div>' : '') +
       '<div class="price-box"><span class="p">' + esc(ST.priceLabel(L)) + '<small>' + ST.priceSuffix(L) + '</small></span>' +
       (isRent && L.deposit ? '<span class="per">Deposit ' + esc(ST.rupees(L.deposit)) + '</span>' : '') + (perSqft() ? '<span class="per">' + perSqft() + '</span>' : '') + '</div>' +
-      '<p class="tagline">' + pills.join('') + '</p>' +
+      '<p class="tagline">' + pills.join('') + '</p>' + brochureBand +
       '<section class="pd-section"><h2>Key details</h2><dl class="facts">' + facts + '</dl></section>' +
       (priceRows ? '<section class="pd-section"><h2>Price list</h2><table class="price-table">' + priceRows + '</table><p class="small muted" style="margin:10px 0 0">Prices are as shared by the developer and may change. Stamp duty, registration and other charges are extra.</p></section>' : '') +
       (highlights ? '<section class="pd-section"><h2>Highlights</h2><ul class="hl">' + highlights + '</ul></section>' : '') +
@@ -84,7 +88,7 @@
       '<p style="margin:10px 0 0"><a href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) + '" target="_blank" rel="noopener">Open in Google Maps</a></p></section>' +
       (L.purpose === 'sale' && L.price ? '<section class="pd-section" id="pd-emi"><h2>EMI estimate</h2><div id="mini-emi"></div></section>' : '') +
       '<button class="report-link" type="button" id="report">' + icon('flag') + 'Report this listing</button>' +
-      '</div><aside id="contact-col"></aside></div>' +
+      '</div><aside>' + ST.reraBox(L, 'side') + '<div id="contact-col"></div></aside></div>' +
       '<section class="section" id="similar-sec" hidden style="padding-bottom:0"><div class="section-head"><div><h2>Similar properties</h2></div><a class="link-more" href="properties.html?city=' + encodeURIComponent(L.city) + '&seg=' + encodeURIComponent(L.segment) + '">See more</a></div><div class="cards" id="similar"></div></section>';
 
     gallery(photos);
@@ -126,12 +130,15 @@
     }
     if (L.isFirm) {
       col.innerHTML = '<div class="contact-card"><div class="cc-head"><img src="assets/img/mark-sm.png" alt=""><div><b>Stand Tall Realty</b><small>Our team handles this property</small></div></div>' +
-        '<div class="cc-body"><a class="btn btn-navy" href="' + ST.tel() + '">' + icon('phone') + 'Call ' + esc(ST.fmtPhone(ST.S.phone)) + '</a>' +
+        '<div class="cc-body">' + (L.kind === 'project' ? '<button class="btn btn-gold" type="button" data-brochure>' + icon('doc') + 'Get brochure &amp; price sheet</button>' : '') +
+        '<a class="btn btn-navy" href="' + ST.tel() + '">' + icon('phone') + 'Call ' + esc(ST.fmtPhone(ST.S.phone)) + '</a>' +
         '<a class="btn btn-wa" href="' + ST.wa(waText()) + '" target="_blank" rel="noopener">' + icon('wa') + 'WhatsApp us</a>' +
         '<button class="btn btn-ghost" type="button" data-chat>' + icon('chat') + 'Chat on the website</button><hr class="cc-sep">' +
         '<b style="font-size:16px">Request a call back or site visit</b><div id="cc-lead"></div></div></div>';
       ST.leadForm($('#cc-lead'), { listing: L, compact: true, submitLabel: 'Request call back', messagePh: 'e.g. I can visit on Saturday morning' });
-      bar.innerHTML = '<a href="' + ST.tel() + '">' + icon('phone') + 'Call</a><a class="wa" href="' + ST.wa(waText()) + '" target="_blank" rel="noopener">' + icon('wa') + 'WhatsApp</a><button type="button" data-chat>' + icon('chat') + 'Chat</button><button type="button" data-enq>' + icon('calendar') + 'Visit</button>';
+      bar.innerHTML = '<a href="' + ST.tel() + '">' + icon('phone') + 'Call</a><a class="wa" href="' + ST.wa(waText()) + '" target="_blank" rel="noopener">' + icon('wa') + 'WhatsApp</a>' +
+        (L.kind === 'project' ? '<button type="button" data-brochure>' + icon('doc') + 'Brochure</button>' : '<button type="button" data-chat>' + icon('chat') + 'Chat</button>') +
+        '<button type="button" data-enq>' + icon('calendar') + 'Visit</button>';
     } else {
       var direct = L.phoneMode === 'direct';
       col.innerHTML = '<div class="contact-card"><div class="cc-head"><span class="cc-avatar">' + esc(ST.initials(L.ownerName)) + '</span><div><b>' + esc(L.ownerName) + '</b><small>' + esc(L.ownerRole || 'Owner') + ', listed ' + esc(ST.timeAgo(L.createdAt)) + '</small></div></div>' +
@@ -145,6 +152,11 @@
     $$('[data-chat]').forEach(function (b) { b.addEventListener('click', startChat); });
     $$('[data-phone]').forEach(function (b) { b.addEventListener('click', phone); });
     $$('[data-enq]').forEach(function (b) { b.addEventListener('click', function () { ST.openEnquiry({ listing: L, title: 'Talk to Stand Tall Realty', submitLabel: 'Request call back' }); }); });
+    $$('[data-brochure]').forEach(function (b) { b.addEventListener('click', brochure); });
+  }
+
+  function brochure() {
+    ST.openEnquiry({ listing: L, brochure: true, title: 'Get the brochure on WhatsApp', submitLabel: 'Send me the brochure', messagePh: 'e.g. Please also send the 2 BHK floor plan' });
   }
 
   function startChat() {

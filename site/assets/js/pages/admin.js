@@ -44,7 +44,7 @@
     var r = cur();
     window.scrollTo(0, 0);
     ({ overview: overview, pending: function () { listingsView(true); }, listings: function () { listingsView(false); }, add: function () { editor(''); },
-      edit: function () { editor(r.arg); }, leads: leadsView, chats: chatsView, users: usersView }[r.tab] || overview)();
+      edit: function () { editor(r.arg); }, import: importView, leads: leadsView, chats: chatsView, users: usersView }[r.tab] || overview)();
   }
   window.addEventListener('hashchange', function () { if (ST.Admin.token()) route(); });
   setInterval(function () { if (ST.Admin.token() && !document.hidden) refreshOverview().catch(function () {}); }, 60000);
@@ -149,6 +149,7 @@
   // ---------- add / edit listing
   function editor(id) {
     root.innerHTML = '<h1 style="font-size:28px">' + (id ? 'Edit ' + esc(id) : 'Add a listing') + '</h1><p class="muted">' + (id ? 'Changes go live as soon as you save.' : 'Your own projects, rentals and resale properties. They go live immediately unless you set the status to Pending.') + '</p>' +
+      (id ? '' : '<p><a href="#import">' + icon('plus') + ' Import projects we prepared for you</a></p>') +
       '<div class="post-card"><div id="alf"><div class="skeleton" style="min-height:300px"></div></div><div class="wiz-nav"><a class="btn btn-ghost" href="#listings">Cancel</a><button class="btn btn-gold" type="button" id="asave">' + (id ? 'Save changes' : 'Publish listing') + '</button></div></div>';
     var p = id ? loadListings(!listingsCache).then(function (all) { return all.filter(function (x) { return x.id === id; })[0]; }) : Promise.resolve(null);
     p.then(function (l) {
@@ -166,8 +167,50 @@
     }).catch(handleErr);
   }
 
+  // ---------- import prepared projects (assets/projects/import.json, added as Pending)
+  function importView() {
+    root.innerHTML = '<h1 style="font-size:28px">Import prepared projects</h1><p class="muted">Projects we prepared for your website. Each one is added as <b>Pending</b>, so visitors cannot see it until you approve it.</p><div id="ibox"><div class="skeleton" style="min-height:160px"></div></div>';
+    var file = fetch(ST.ASSETS + 'projects/import.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('There are no prepared projects yet.');
+      return r.json();
+    });
+    Promise.all([file, loadListings(true)]).then(function (res) {
+      var items = (res[0] && res[0].projects) || [], all = res[1] || [];
+      function key(x) { return [String(x.projectName || x.title || '').trim().toLowerCase(), String(x.reraNumber || '').trim().toUpperCase()].join('|'); }
+      var have = {}; all.forEach(function (l) { have[key(l)] = l.id; });
+      if (!items.length) { $('#ibox').innerHTML = '<div class="empty"><h3>Nothing to import</h3><p>New projects will show up here once they are prepared.</p></div>'; return; }
+      $('#ibox').innerHTML = '<form class="stack" id="iform" novalidate>' + items.map(function (p, i) {
+        var done = have[key(p)];
+        return '<label class="a-card import-row"><input type="checkbox" name="p" value="' + i + '"' + (done ? ' disabled' : ' checked') + '><div>' +
+          '<h3>' + esc(p.title || p.projectName) + '</h3><div class="a-meta"><span>' + esc([p.locality, p.city].filter(Boolean).join(', ')) + '</span>' +
+          '<span>MahaRERA ' + esc(p.reraNumber || 'missing') + '</span><span>' + (p.photos || []).length + ' photos</span>' +
+          (done ? '<span class="pill ok">Already added as ' + esc(done) + '</span>' : '') + '</div></div></label>';
+      }).join('') + '<div class="form-actions"><button class="btn btn-gold" type="submit">Import selected as Pending</button></div></form>';
+      $('#iform').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var b = $('button[type=submit]', this);
+        var picks = $$('input[name=p]:checked', this).map(function (x) { return items[+x.value]; });
+        if (!picks.length) return ST.toast('Choose at least one project.', 'error');
+        ST.busy(b, true, 'Importing…');
+        var n = 0;
+        picks.reduce(function (chain, item) {
+          return chain.then(function () {
+            n++; b.textContent = 'Importing ' + n + ' of ' + picks.length + '…';
+            return ST.api('adminSaveListing', { listing: Object.assign({}, item, { status: 'Pending' }) });
+          });
+        }, Promise.resolve()).then(function () {
+          ST.toast('Imported ' + picks.length + (picks.length > 1 ? ' projects' : ' project') + ' as Pending.', 'ok');
+          listingsCache = null; refreshOverview().catch(function () {}); location.hash = '#pending';
+        }).catch(function (err) { ST.busy(b, false); ST.toast(err.message, 'error'); });
+      });
+    }).catch(function (err) {
+      if (err && err.code === 'ADMIN_REQUIRED') return login();
+      $('#ibox').innerHTML = '<div class="empty"><h3>Nothing to import</h3><p>' + esc(err.message) + '</p></div>';
+    });
+  }
+
   // ---------- leads
-  var LEAD_ST = ['New', 'Contacted', 'Site visit', 'Negotiation', 'Closed', 'Not interested'];
+  var LEAD_ST =['New', 'Contacted', 'Site visit', 'Negotiation', 'Closed', 'Not interested'];
   function leadsView() {
     root.innerHTML = '<h1 style="font-size:28px">Leads and enquiries</h1><div class="toolbar"><input class="grow" id="dq" placeholder="Search name, number, area"><select id="ds"><option value="">Any status</option>' + LEAD_ST.map(function (s) { return '<option>' + s + '</option>'; }).join('') + '</select><select id="di"><option value="">Any type</option></select><select id="dv"><option value="">Any number</option><option value="Yes">OTP verified</option><option value="No">Not verified</option></select><button class="btn btn-ghost" type="button" id="csv">Download CSV</button></div><div id="dbox"><div class="skeleton" style="min-height:160px"></div></div>';
     ST.api('adminLeads').then(function (leads) {

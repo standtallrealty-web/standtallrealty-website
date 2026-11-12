@@ -428,6 +428,27 @@ body.modal-open { overflow: hidden; }
 .pill .ic { width: 15px; height: 15px; }
 .pd-section { background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); padding: 24px; margin-top: 20px; }
 .pd-section h2 { font-size: 22px; margin-bottom: 14px; }
+/* MahaRERA box: top right on desktop (above the contact card), under the title on phones.
+   The numbers and website are set larger than the page's address and phone text, as MahaRERA asks. */
+.rera-box { background: #fff; border: 2px solid var(--navy); border-radius: var(--r-lg); padding: 14px 16px; margin-bottom: 16px; }
+.rb-main { display: flex; align-items: center; gap: 16px; }
+.rb-qrs { display: flex; gap: 8px; flex: none; }
+.rb-qr { width: 104px; height: 104px; border-radius: 6px; background: #fff; }
+.rb-qr.img-failed { display: none; }
+.rb-text { min-width: 0; }
+.rera-box p { margin: 0; }
+.rb-label { font-size: 14px; font-weight: 600; color: var(--ink-2); }
+.rb-no { font: 700 20px/1.3 var(--sans); letter-spacing: .02em; color: var(--ink); overflow-wrap: anywhere; }
+.rera-box .rb-web { font-size: 17px; font-weight: 600; margin-top: 10px; }
+.rera-box .rb-agent { font-size: 15px; color: var(--ink-2); margin-top: 4px; }
+.rb-top { display: none; }
+.brochure-band { display: flex; align-items: center; justify-content: space-between; gap: 14px 20px; flex-wrap: wrap; background: var(--navy); color: #fff; border-radius: var(--r-lg); padding: 20px 22px; margin-top: 20px; }
+.brochure-band h2 { color: #fff; font-size: 21px; margin: 0 0 4px; }
+.brochure-band p { margin: 0; color: #C9D5E6; }
+.pc-rera { display: flex; align-items: center; gap: 4px; color: var(--ok); font-size: 14px; font-weight: 600; margin: 4px 0 0; }
+.pc-rera .ic { width: 15px; height: 15px; }
+.a-card.import-row { display: flex; gap: 14px; align-items: flex-start; cursor: pointer; }
+.import-row input { width: 20px; height: 20px; margin-top: 4px; flex: none; accent-color: var(--navy); }
 .facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; margin: 0; }
 .facts div { padding: 12px 14px 12px 0; border-bottom: 1px solid var(--line); }
 .facts dt { font-size: 13px; color: var(--muted); }
@@ -646,6 +667,10 @@ body.modal-open { overflow: hidden; }
   .search-row .btn { grid-column: 1 / -1; }
   .band .wrap, .tools, .pd-grid, .post-wrap { grid-template-columns: minmax(0, 1fr); }
   .contact-card { position: static; }
+  .rb-top { display: block; }
+  .rb-side { display: none; }
+  .rb-qr { width: 92px; height: 92px; }
+  .brochure-band .btn { width: 100%; }
   .progress { display: flex; gap: 4px; position: static; overflow-x: auto; }
   .progress li { flex: 1; flex-direction: column; text-align: center; font-size: 12px; gap: 4px; padding: 0; }
   .progress li:not(:last-child)::after { display: none; }

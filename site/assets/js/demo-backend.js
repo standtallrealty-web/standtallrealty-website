@@ -1,5 +1,5 @@
 /* DEMO MODE ONLY — runs the real backend code inside your browser so the site can be tried before the
-   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611120401. */
+   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611121156. */
 /*
  * Minimal Google Apps Script runtime emulator.
  * Used (1) by the automated tests in Node and (2) by the website's demo mode in the browser,
@@ -1379,9 +1379,9 @@ function apiListingAction_(b, ctx) {
 
 var CARD_FIELDS = ['id', 'kind', 'segment', 'purpose', 'category', 'propertyType', 'title', 'bhk', 'configurations',
   'carpetArea', 'areaUnit', 'price', 'priceMax', 'rent', 'deposit', 'negotiable', 'furnishing', 'possession',
-  'possessionDate', 'plotType', 'tenantPreference', 'state', 'district', 'city', 'locality', 'lat', 'lng', 'featured', 'tag', 'ownerRole'];
+  'possessionDate', 'plotType', 'tenantPreference', 'state', 'district', 'city', 'locality', 'lat', 'lng', 'featured', 'tag', 'ownerRole', 'reraNumber'];
 var DETAIL_FIELDS = CARD_FIELDS.concat(['priceNote', 'maintenance', 'floor', 'totalFloors', 'facing', 'parking',
-  'bathrooms', 'balconies', 'ageOfProperty', 'availableFrom', 'reraNumber', 'amenities', 'highlights', 'description',
+  'bathrooms', 'balconies', 'ageOfProperty', 'availableFrom', 'amenities', 'highlights', 'description',
   'landmark', 'pincode', 'videoUrl', 'phoneMode']);
 
 function publicView_(r, detail) {

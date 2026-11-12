@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611120401';
+  var VER = '202611121156';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -478,7 +478,8 @@
     insta: '<path d="M8 3h8a5 5 0 0 1 5 5v8a5 5 0 0 1-5 5H8a5 5 0 0 1-5-5V8a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v8a3 3 0 0 0 3 3h8a3 3 0 0 0 3-3V8a3 3 0 0 0-3-3H8zm4 3.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7zm0 2a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3zM17 6.3a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/>',
     flag: '<path d="M5 3h10l1 2h4v10h-7l-1-2H7v8H5V3zm2 2v6h6.2l1 2H18V7h-3.2l-1-2H7z"/>',
     lock: '<path d="M7 10V8a5 5 0 0 1 10 0v2h1a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1h1zm2 0h6V8a3 3 0 0 0-6 0v2zm-2 2v7h10v-7H7z"/>',
-    eye: '<path d="M12 5c5 0 8.6 4.3 9.8 6.4.2.4.2.8 0 1.2C20.6 14.7 17 19 12 19s-8.6-4.3-9.8-6.4a1.3 1.3 0 0 1 0-1.2C3.4 9.3 7 5 12 5zm0 2c-3.6 0-6.4 3-7.7 5 1.3 2 4.1 5 7.7 5s6.4-3 7.7-5c-1.3-2-4.1-5-7.7-5zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>'
+    eye: '<path d="M12 5c5 0 8.6 4.3 9.8 6.4.2.4.2.8 0 1.2C20.6 14.7 17 19 12 19s-8.6-4.3-9.8-6.4a1.3 1.3 0 0 1 0-1.2C3.4 9.3 7 5 12 5zm0 2c-3.6 0-6.4 3-7.7 5 1.3 2 4.1 5 7.7 5s6.4-3 7.7-5c-1.3-2-4.1-5-7.7-5zm0 2a3 3 0 1 1 0 6 3 3 0 0 1 0-6z"/>',
+    doc: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>'
   };
   function icon(name, cls) { return '<svg class="ic ' + (cls || '') + '" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (ICONS[name] || '') + '</svg>'; }
 
@@ -578,6 +579,31 @@
     var map = { 'Under Construction': 'Under construction', 'Ready to Move': 'Ready to move', 'Resale': 'Resale', 'Rental': 'For rent', 'Commercial': l.purpose === 'rent' ? 'Commercial for rent' : 'Commercial', 'Plots': 'Plot' };
     return map[l.segment] || l.segment || '';
   }
+
+  // MahaRERA: every project ad shows the project registration number, the project's QR code and the
+  // MahaRERA website, near the top right; agents also show their own registration number.
+  // QR images live in assets/rera-qr/<NUMBER>.png (the builder's official QR, sent to us).
+  var MAHARERA_SITE = 'https://maharera.maharashtra.gov.in';
+  function reraNos(l) {
+    var raw = String((l && l.reraNumber) || '').trim().toUpperCase();
+    if (!raw) return [];
+    var list = raw.split(/[\s,;\/]+/).filter(function (x) { return /^[A-Z]{1,4}\d{6,}$/.test(x); });
+    return list.length ? list.filter(function (x, i) { return list.indexOf(x) === i; }) : [raw];
+  }
+  function reraBox(l, where) {
+    var nos = reraNos(l);
+    if (!nos.length) return '';
+    var agent = String(S.reraAgentNo || '').trim();
+    return '<div class="rera-box rb-' + where + '" role="group" aria-label="MahaRERA registration">' +
+      '<div class="rb-main"><div class="rb-qrs">' + nos.slice(0, 3).map(function (n) {
+        return /^[A-Z0-9]+$/.test(n) ? '<img class="rb-qr" src="' + ASSETS + 'rera-qr/' + n + '.png" alt="MahaRERA QR code for ' + esc(n) + '" width="120" height="120">' : '';
+      }).join('') + '</div>' +
+      '<div class="rb-text"><p class="rb-label">' + (nos.length > 1 ? 'MahaRERA registration nos.' : 'MahaRERA registration no.') + '</p>' +
+      nos.map(function (n) { return '<p class="rb-no">' + esc(n) + '</p>'; }).join('') + '</div></div>' +
+      '<p class="rb-web"><a href="' + MAHARERA_SITE + '" target="_blank" rel="noopener">maharera.maharashtra.gov.in</a></p>' +
+      (agent ? '<p class="rb-agent">Agent: Stand Tall Realty, MahaRERA no. <b>' + esc(agent) + '</b></p>' : '') +
+      '</div>';
+  }
   function card(l, opts) {
     opts = opts || {};
     var media = art(l) + (l.photos && l.photos[0] ? imgTag(l.photos[0], 700, l.title, 'pc-img') : '');
@@ -598,6 +624,7 @@
       '<div class="pc-body"><p class="pc-price">' + esc(priceLabel(l)) + '<small>' + priceSuffix(l) + '</small></p>' +
       '<h3 class="pc-title"><a href="' + listingUrl(l.id) + '">' + esc(l.title) + '</a></h3>' +
       '<p class="pc-loc">' + icon('pin') + esc(placeLabel(l)) + '</p>' +
+      (reraNos(l).length ? '<p class="pc-rera">' + icon('shield') + 'MahaRERA ' + esc(reraNos(l)[0]) + (reraNos(l).length > 1 ? ' +' + (reraNos(l).length - 1) : '') + '</p>' : '') +
       (specs.length ? '<ul class="pc-specs">' + specs.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>' : '') +
       '<p class="pc-foot"><span class="pc-by">' + (l.isFirm ? icon('shield') + 'Stand Tall Realty' : esc(l.ownerName || 'Owner') + ' <em>(' + esc(String(l.ownerRole || 'Owner').toLowerCase()) + ')</em>') + '</span><span>' + esc(timeAgo(l.createdAt)) + '</span></p>' +
       '</div></article>';
@@ -818,7 +845,7 @@
       '<div class="intent-fields stack"></div>' +
       '<div class="grid-2">' + txt('name', 'Your name', '', 'autocomplete="name" required') + txt('phone', 'Mobile number', '10-digit mobile', 'type="tel" inputmode="numeric" autocomplete="tel" required') + '</div>' +
       (opts.compact ? '' : '<div class="grid-2">' + txt('email', 'Email <em>(optional)</em>', '', 'type="email" autocomplete="email"') + sel('calltime', 'Best time to call', ['Any time', 'Morning (10–1)', 'Afternoon (1–5)', 'Evening (5–8)'], 'Any time') + '</div>') +
-      (opts.listing ? '<label class="check"><input type="checkbox" name="visit"> I would like a site visit</label>' : '') +
+      (opts.listing && !opts.brochure ? '<label class="check"><input type="checkbox" name="visit"> I would like a site visit</label>' : '') +
       '<label class="field"><span>Message <em>(optional)</em></span><textarea name="message" rows="' + (opts.compact ? 2 : 3) + '" maxlength="1500" placeholder="' + esc(opts.messagePh || 'Anything else we should know?') + '"></textarea></label>' +
       '<input class="hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">' +
       '<p class="small muted consent">By sending this, you agree that Stand Tall Realty may call or WhatsApp you about your enquiry.</p>' +
@@ -834,7 +861,7 @@
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var d = formData(form), btn = $('button[type=submit]', form);
-      var intent = opts.listing ? (d.visit ? 'site_visit' : 'listing') : d.intent;
+      var intent = opts.brochure ? 'Brochure request' : opts.listing ? (d.visit ? 'site_visit' : 'listing') : d.intent;
       if (!intent) return fieldError(form, 'Choose what you are looking for.');
       if ((d.name || '').length < 2) { form.name.focus(); return fieldError(form, 'Enter your name.'); }
       if (!normPhone(d.phone)) { form.phone.focus(); return fieldError(form, 'Enter a valid 10-digit mobile number.'); }
@@ -848,16 +875,21 @@
         listingId: opts.listing ? opts.listing.id : '', listingTitle: opts.listing ? opts.listing.title : '', page: location.pathname.split('/').pop() || 'index.html', source: leadSource() })
         .then(function (r) {
           var label = (intents.filter(function (i) { return i[0] === intent; })[0] || [0, opts.listing ? 'this property' : 'your enquiry'])[1];
-          var waText = 'Hi Stand Tall Realty, I am ' + d.name + '. ' + (opts.listing ? 'I am interested in ' + opts.listing.id + ' – ' + opts.listing.title + '.' : 'I enquired on your website: ' + label + '.') + (details ? ' ' + details : '');
+          var waText = opts.brochure ? 'Hi Stand Tall Realty, I am ' + d.name + '. Please send me the brochure and price sheet for ' + opts.listing.title + ' (' + opts.listing.id + ').' + (d.message ? ' ' + d.message : '') :
+            'Hi Stand Tall Realty, I am ' + d.name + '. ' + (opts.listing ? 'I am interested in ' + opts.listing.id + ' – ' + opts.listing.title + '.' : 'I enquired on your website: ' + label + '.') + (details ? ' ' + details : '');
           var phone = normPhone(d.phone);
           function finished(verified) {
             track('Lead', { content_name: intent });
-            el.innerHTML = '<div class="lead-done" role="status">' + icon('check', 'ic-done') + '<h3>Thanks, ' + esc(d.name.split(' ')[0]) + '. We have your enquiry.</h3>' +
+            var first = esc(d.name.split(' ')[0]);
+            el.innerHTML = '<div class="lead-done" role="status">' + icon('check', 'ic-done') +
+              (opts.brochure ? '<h3>Thanks, ' + first + '. We will send you the brochure.</h3>' : '<h3>Thanks, ' + first + '. We have your enquiry.</h3>') +
               (verified ? '<p class="verified-note">' + icon('shield') + 'Mobile number verified</p>' : '') +
-              '<p>Our team will call you on <b>' + esc(fmtPhone(phone)) + '</b> soon. Want a faster reply?</p>' +
-              '<a class="btn btn-wa" href="' + wa(waText) + '" target="_blank" rel="noopener">' + icon('wa') + 'Continue on WhatsApp</a>' +
-              '<button type="button" class="btn btn-link" data-again>Send another enquiry</button></div>';
-            $('[data-again]', el).onclick = function () { leadForm(el, opts); };
+              (opts.brochure ? '<p>We will WhatsApp the brochure and price sheet to <b>' + esc(fmtPhone(phone)) + '</b>. Want it right now?</p>' +
+                '<a class="btn btn-wa" href="' + wa(waText) + '" target="_blank" rel="noopener">' + icon('wa') + 'Ask on WhatsApp now</a>' :
+                '<p>Our team will call you on <b>' + esc(fmtPhone(phone)) + '</b> soon. Want a faster reply?</p>' +
+                '<a class="btn btn-wa" href="' + wa(waText) + '" target="_blank" rel="noopener">' + icon('wa') + 'Continue on WhatsApp</a>') +
+              (opts.brochure ? '' : '<button type="button" class="btn btn-link" data-again>Send another enquiry</button>') + '</div>';
+            var again = $('[data-again]', el); if (again) again.onclick = function () { leadForm(el, opts); };
             if (opts.onDone) opts.onDone();
           }
           if (!r || !r.otp) return finished(!!(r && r.verified));
@@ -938,6 +970,8 @@
     });
     $$('[data-enquire]').forEach(function (b) { b.addEventListener('click', function (e) { e.preventDefault(); openEnquiry({ intent: b.dataset.enquire || '' }); }); });
     $$('[data-year]').forEach(function (y) { y.textContent = new Date().getFullYear(); });
+    var agentNo = String(S.reraAgentNo || '').trim();
+    if (agentNo) $$('[data-rera]').forEach(function (p) { p.textContent = 'MahaRERA agent registration no. ' + agentNo; p.hidden = false; });
     if (DEMO && page !== 'admin') {
       var bar = document.createElement('div');
       bar.className = 'demo-bar';
@@ -954,7 +988,7 @@
     S: S, DEMO: DEMO, ASSETS: ASSETS, $: $, $$: $$, esc: esc, sleep: sleep, debounce: debounce, qs: qs, store: store,
     inr: inr, rupees: rupees, priceLabel: priceLabel, priceSuffix: priceSuffix, bhkLabel: bhkLabel, areaLabel: areaLabel, timeAgo: timeAgo,
     clock: clock, dayLabel: dayLabel, fmtPhone: fmtPhone, normPhone: normPhone, tel: tel, wa: wa, listingUrl: listingUrl, absUrl: absUrl,
-    placeLabel: placeLabel, segLabel: segLabel, api: api, ApiError: ApiError, Auth: Auth, Admin: Admin, toast: toast, openModal: openModal,
+    placeLabel: placeLabel, segLabel: segLabel, reraNos: reraNos, reraBox: reraBox, api: api, ApiError: ApiError, Auth: Auth, Admin: Admin, toast: toast, openModal: openModal,
     confirmBox: confirmBox, busy: busy, formData: formData, fieldError: fieldError, openLogin: openLogin, icon: icon, art: art,
     photoUrl: photoUrl, imgTag: imgTag, Saved: Saved, card: card, getListings: getListings, setBadge: setBadge, refreshUnread: refreshUnread,
     detectLocation: detectLocation, reverseGeocode: reverseGeocode, distanceKm: distanceKm, cityOptions: cityOptions, fillLocalities: fillLocalities,
