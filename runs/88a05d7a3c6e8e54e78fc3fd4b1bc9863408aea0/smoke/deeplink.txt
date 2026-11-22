@@ -1,0 +1,7 @@
+Starting: Intent { act=android.intent.action.VIEW cat=[android.intent.category.BROWSABLE] dat=https://www.standtallrealty.com/... }
+Status: ok
+LaunchState: WARM
+Activity: com.standtallrealty.app/com.google.androidbrowserhelper.trusted.LauncherActivity
+TotalTime: 417
+WaitTime: 427
+Complete
