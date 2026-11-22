@@ -99,12 +99,15 @@
       '<label class="field"><span>Full name</span><input name="name" value="' + esc(u.name) + '" autocomplete="name"></label>' +
       '<label class="field"><span>Mobile number' + (u.verified ? ' <span class="pill ok" style="margin-left:6px">' + icon('shield') + 'Verified</span>' : '') + '</span><input value="' + esc(ST.fmtPhone(u.phone)) + '" disabled><small class="hint">To change your number, message us on WhatsApp.</small></label>' +
       '<label class="field"><span>Email <em>(for chat and listing alerts)</em></span><input name="email" type="email" value="' + esc(u.email || '') + '" autocomplete="email"></label>' +
+      (u.google || u.facebook ? '<p class="linked-note small">' + icon('check') + (u.google && u.facebook ? 'You can also log in with Google or Facebook.' : u.google ? 'You can also log in with Google.' : 'You can also log in with Facebook.') + '</p>' : '') +
       '<div class="form-actions"><button class="btn btn-navy" type="submit">Save details</button></div></form>' +
       '<div class="stack"><form class="panel stack" id="pw" novalidate><h2>' + (hasPw ? 'Change password' : 'Set a password') + '</h2>' +
       (hasPw ? '<label class="field"><span>Current password</span><input name="oldPassword" type="password" autocomplete="current-password"></label>'
         : '<p class="muted" style="margin:0">Optional. You can always log in with an OTP on your mobile.</p>') +
       '<label class="field"><span>New password</span><input name="newPassword" type="password" autocomplete="new-password" minlength="6" placeholder="At least 6 characters"></label><div class="form-actions"><button class="btn btn-ghost" type="submit">' + (hasPw ? 'Update password' : 'Set password') + '</button></div></form>' +
-      '<div class="panel"><h2>Log out</h2><p class="muted">Log out of this device.</p><button class="btn btn-ghost" type="button" id="logout">Log out</button></div></div></div>';
+      '<div class="panel"><h2>Log out</h2><p class="muted">Log out of this device.</p><button class="btn btn-ghost" type="button" id="logout">Log out</button></div>' +
+      '<div class="panel"><h2>Delete my account</h2><p class="muted">This removes your account and takes your listings off the website. It cannot be undone.</p>' +
+      '<button class="btn btn-danger" type="button" id="delacct">Delete my account</button> <a class="small" href="delete-account.html">What gets deleted</a></div></div></div>';
     $('#pf').addEventListener('submit', function (e) {
       e.preventDefault(); var d = ST.formData(this), b = $('button', this); ST.busy(b, true, 'Saving…');
       ST.api('updateProfile', d).then(function (r) { ST.busy(b, false); ST.Auth.setUser(r.user); ST.toast('Details saved.', 'ok'); }).catch(function (err) { ST.busy(b, false); ST.fieldError(e.target, err.message); });
@@ -118,6 +121,33 @@
       }).catch(function (err) { ST.busy(b, false); ST.fieldError(f, err.message); });
     });
     $('#logout').onclick = function () { ST.Auth.clear(); location.href = 'index.html'; };
+    $('#delacct').onclick = deleteAccount;
+  }
+
+  function deleteAccount() {
+    var m = ST.openModal({ title: 'Delete your account?', size: 'sm', body: '<form class="stack" novalidate>' +
+      '<p style="margin:0">Your account, your saved details and your login go. Your listings come off the website. This cannot be undone.</p>' +
+      '<p class="small muted" style="margin:0">Enquiries you sent us stay with our team as business records. <a href="delete-account.html" target="_blank">Details</a></p>' +
+      '<label class="field"><span>Type DELETE to confirm</span><input name="confirm" autocomplete="off" autocapitalize="characters" spellcheck="false"></label>' +
+      '<div class="form-actions"><button class="btn btn-danger btn-block" type="submit">Delete my account</button></div></form>' });
+    var f = $('form', m.body);
+    setTimeout(function () { try { f.confirm.focus(); } catch (e) {} }, 60);
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var b = $('button[type=submit]', f);
+      if (f.confirm.value.trim().toUpperCase() !== 'DELETE') { f.confirm.focus(); return ST.fieldError(f, 'Type DELETE to confirm.'); }
+      ST.fieldError(f, ''); ST.busy(b, true, 'Deleting…');
+      ST.api('deleteAccount', { confirm: 'DELETE' }).then(function () {
+        ST.Auth.clear();
+        ST.store.del('st_saved');
+        m.close();
+        ST.toast('Your account has been deleted.', 'ok');
+        setTimeout(function () { location.href = 'index.html'; }, 1200);
+      }).catch(function (err) {
+        ST.busy(b, false);
+        ST.fieldError(f, err.code === 'BAD_ACTION' ? 'Please message us on WhatsApp from your registered number, and we will delete your account.' : err.message);
+      });
+    });
   }
 
   var u = ST.Auth.user();

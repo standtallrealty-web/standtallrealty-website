@@ -972,3 +972,20 @@ a.pill-ver:hover { text-decoration: underline; }
   .foot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 900px) { .tools .next-panel { order: 2; } }
+
+/* ---------- Google / Facebook sign-in ---------- */
+.social-login { display: grid; gap: 10px; margin: 0 0 2px; }
+.g-btn { display: flex; justify-content: center; min-height: 44px; }
+.g-btn > .btn { width: 100%; }
+.btn-fb { background: #1877F2; border-color: #1877F2; color: #fff; }
+.btn-fb:hover, .btn-fb:focus-visible { background: #0F65D9; border-color: #0F65D9; color: #fff; }
+.btn-fb .ic { fill: currentColor; width: 20px; height: 20px; }
+.social-msg { margin: 0; color: var(--bad); }
+.or-line { display: flex; align-items: center; gap: 12px; margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+.or-line::before, .or-line::after { content: ''; flex: 1; border-top: 1px solid var(--line); }
+.linked-note { display: flex; align-items: center; gap: 6px; margin: 0; color: var(--muted); }
+.linked-note .ic { width: 16px; height: 16px; color: var(--ok); }
+
+/* ---------- Android app ---------- */
+.in-app .app-get { display: none !important; }
+

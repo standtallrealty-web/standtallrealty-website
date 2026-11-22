@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611222027';
+  var VER = '202611230019';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -31,6 +31,15 @@
     json: function (k, d) { try { var v = store.get(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
     setJson: function (k, v) { store.set(k, JSON.stringify(v)); }
   };
+
+  // ---------------------------------------------------------------- inside the Android app?
+  // The app opens the site with ?utm_source=android_app, and Chrome gives it an android-app:// referrer.
+  // Remembered for this visit only, because Chrome shares storage between the app and the normal browser.
+  var IN_APP = (function () {
+    var yes = /(^|[?&])utm_source=android_app(&|$)/.test(location.search.slice(1)) || /^android-app:\/\/com\.standtallrealty\.app/.test(document.referrer || '');
+    try { if (yes) sessionStorage.setItem('st_app', '1'); return yes || sessionStorage.getItem('st_app') === '1'; } catch (e) { return yes; }
+  })();
+  if (IN_APP) document.documentElement.classList.add('in-app');
 
   // ---------------------------------------------------------------- formatting
   function trimNum(x) { return String(Math.round(x * 100) / 100); }
@@ -197,6 +206,36 @@
     cfgPromise = api('config').then(function (v) { store.setJson('st_cfg', { t: Date.now(), u: API_URL, v: v }); return v; })
       .catch(function () { cfgPromise = null; return { otp: false }; });
     return cfgPromise;
+  }
+
+  // ---------------------------------------------------------------- Google / Facebook sign-in SDKs
+  var scriptsLoading = {};
+  function loadScript(src) {
+    if (scriptsLoading[src]) return scriptsLoading[src];
+    return (scriptsLoading[src] = new Promise(function (resolve, reject) {
+      var el = document.createElement('script');
+      el.src = src; el.async = true; el.defer = true;
+      el.onload = resolve;
+      el.onerror = function () { delete scriptsLoading[src]; el.remove(); reject(new Error('Could not load ' + src)); };
+      document.head.appendChild(el);
+    }));
+  }
+  var gisReady = null, gisHandler = null;
+  function googleSignIn(clientId) {
+    if (!gisReady) gisReady = loadScript('https://accounts.google.com/gsi/client').then(function () {
+      window.google.accounts.id.initialize({ client_id: clientId, ux_mode: 'popup', context: 'signin', itp_support: true,
+        callback: function (r) { if (gisHandler && r && r.credential) gisHandler(r.credential); } });
+      return window.google.accounts.id;
+    }).catch(function (e) { gisReady = null; throw e; });
+    return gisReady;
+  }
+  var FB_VERSION = 'v26.0', fbReady = null;
+  function facebookSdk(appId) {
+    if (!fbReady) fbReady = new Promise(function (resolve, reject) {
+      window.fbAsyncInit = function () { window.FB.init({ appId: appId, cookie: false, xfbml: false, version: FB_VERSION }); resolve(window.FB); };
+      loadScript('https://connect.facebook.net/en_US/sdk.js').catch(function (e) { fbReady = null; reject(e); });
+    });
+    return fbReady;
   }
 
   // ---------------------------------------------------------------- auth
@@ -366,6 +405,100 @@
       var terms = '<p class="small muted center">By continuing you agree to our <a href="terms.html" target="_blank">terms</a> and <a href="privacy.html" target="_blank">privacy policy</a>.</p>';
       function title(t) { $('h2', m.el).textContent = t; }
       function focusFirst() { focusSoon(function () { return $('input:not([type=hidden])', body); }, body, 40); }
+      var cfg = {};   // site settings: OTP on? Google / Facebook IDs
+      function socialHtml() {
+        if (!cfg.google && !cfg.facebook) return '';
+        return '<div class="social-login">' +
+          (cfg.google ? '<div class="g-btn" data-google><button type="button" class="btn btn-ghost btn-block" disabled>Continue with Google</button></div>' : '') +
+          (cfg.facebook ? '<button type="button" class="btn btn-fb btn-block" data-facebook>' + icon('fb') + 'Continue with Facebook</button>' : '') +
+          '<p class="social-msg small" role="alert" hidden></p><p class="or-line"><span>or use your mobile number</span></p></div>';
+      }
+      function socialMsg(t) { var el = $('.social-msg', body); if (el) { el.textContent = t || ''; el.hidden = !t; } }
+      function wireSocial() {
+        var g = $('[data-google]', body), f = $('[data-facebook]', body);
+        if (g) {
+          gisHandler = function (credential) { if (document.body.contains(g)) socialSignIn('google', { credential: credential }); };
+          googleSignIn(cfg.google).then(function (id) {
+            if (!document.body.contains(g)) return;
+            g.innerHTML = '';
+            id.renderButton(g, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'rectangular',
+              logo_alignment: 'center', width: Math.min(400, Math.max(240, g.clientWidth || 320)), locale: window.ST_LANG === 'hi' ? 'hi' : 'en' });
+          }).catch(function () { g.innerHTML = ''; socialMsg('Google sign-in could not load. Check your internet and try again.'); });
+        }
+        if (f) {
+          facebookSdk(cfg.facebook).catch(function () {});
+          f.onclick = function () {
+            socialMsg('');
+            if (!window.FB || !window.FB.login) { facebookSdk(cfg.facebook).catch(function () {}); return socialMsg('Facebook is still loading. Please tap again in a moment.'); }
+            window.FB.login(function (r) {
+              if (r && r.authResponse && r.authResponse.accessToken) socialSignIn('facebook', { accessToken: r.authResponse.accessToken });
+              else socialMsg('Facebook sign-in was cancelled.');
+            }, { scope: 'public_profile,email' });
+          };
+        }
+      }
+      function socialSignIn(provider, payload) {
+        socialMsg('');
+        var btns = $$('.social-login button', body);
+        btns.forEach(function (b) { b.disabled = true; });
+        api('socialLogin', Object.assign({ provider: provider }, payload)).then(function (x) {
+          if (x.needPhone) socialPhoneStep(x); else finish(x, false);
+        }).catch(function (err) { btns.forEach(function (b) { b.disabled = false; }); socialMsg(err.message); });
+      }
+      // New Google / Facebook sign-in: we still need the mobile number (proved by OTP when OTP is on).
+      function socialPhoneStep(x, prefill) {
+        var useOtp = !!cfg.otp;
+        title('One more step');
+        body.innerHTML = '<form class="stack" data-step="social" novalidate>' +
+          '<p class="verified-note">' + icon('check') + (x.provider === 'facebook' ? 'Signed in with Facebook' : 'Signed in with Google') + '</p>' +
+          '<p class="small muted" style="margin:0">Add your mobile number so our team can reply about properties. We never share it without your OK.</p>' +
+          '<label class="field"><span>Full name</span><input name="name" autocomplete="name" required></label>' +
+          '<label class="field"><span>Mobile number</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" required></label>' +
+          '<div class="form-actions"><button class="btn btn-gold btn-block" type="submit">' + (useOtp ? 'Get OTP' : 'Create account') + '</button></div>' + terms + '</form>';
+        var form = $('form', body);
+        form.name.value = (prefill && prefill.name) || x.name || '';
+        if (prefill && prefill.phone) form.phone.value = prefill.phone;
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var d = formData(form), phone = normPhone(d.phone), btn = $('button[type=submit]', form);
+          if ((d.name || '').trim().length < 2) { form.name.focus(); return fieldError(form, 'Enter your full name.'); }
+          if (!phone) { form.phone.focus(); return fieldError(form, 'Enter a valid 10-digit mobile number.'); }
+          fieldError(form, '');
+          if (!useOtp) {
+            busy(btn, true, 'Creating account…');
+            return api('socialLogin', { proof: x.proof, phone: phone, name: d.name }).then(function (r) { finish(r, !!r.created); })
+              .catch(function (err) { busy(btn, false); socialError(form, err, x, phone); });
+          }
+          busy(btn, true, 'Sending OTP…');
+          api('sendOtp', { phone: phone, purpose: 'login' }).then(function (r) { socialOtpStep(x, phone, d.name, r); }).catch(function (err) {
+            busy(btn, false);
+            if (err.code === 'OTP_WAIT') return socialOtpStep(x, phone, d.name, { resendIn: waitSeconds(err) });
+            fieldError(form, err.message);
+          });
+        });
+        focusSoon(function () { return form.name.value ? form.phone : form.name; }, body, 40);
+      }
+      function socialError(form, err, x, phone) {
+        fieldError(form, err.message);
+        if (err.code === 'EXISTS') {
+          var p = document.createElement('p'); p.className = 'center'; p.style.margin = '0';
+          p.innerHTML = '<button type="button" class="btn-link">Log in with password</button>';
+          p.firstChild.onclick = function () { passwordStep(phone); };
+          form.appendChild(p);
+        }
+        if (err.code === 'SOCIAL_EXPIRED') setTimeout(start, 1600);
+      }
+      function socialOtpStep(x, phone, name, r) {
+        title('Enter the OTP');
+        body.innerHTML = '';
+        body.appendChild(otpBox({ phone: phone, resendIn: r.resendIn, demoOtp: r.demoOtp, verifyLabel: 'Verify and continue',
+          onVerify: function (code) {
+            return api('socialLogin', { proof: x.proof, phone: phone, name: name, otp: code }).then(function (res) { finish(res, !!res.created); });
+          },
+          onResend: function () { return api('sendOtp', { phone: phone, purpose: 'login' }); },
+          onChange: function () { socialPhoneStep(x, { name: name, phone: phone }); } }));
+      }
+      function start() { if (cfg.otp) phoneStep(''); else passwordTabs(); }
       function finish(r, created) {
         done = true;
         Auth.set(r.token, r.user);
@@ -376,12 +509,13 @@
 
       function phoneStep(prefill) {
         title('Log in or sign up');
-        body.innerHTML = reasonHtml + '<form class="stack" data-step="phone" novalidate>' +
+        body.innerHTML = reasonHtml + socialHtml() + '<form class="stack" data-step="phone" novalidate>' +
           '<label class="field"><span>Mobile number</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" required></label>' +
           '<div class="form-actions"><button class="btn btn-gold btn-block" type="submit">Get OTP</button></div>' +
           '<p class="small muted center" style="margin:0">New here? The same OTP creates your free account.</p>' +
           '<p class="center" style="margin:0"><button type="button" class="btn-link" data-pw>Log in with password instead</button></p>' + terms + '</form>';
         var form = $('form', body);
+        wireSocial();
         if (prefill) form.phone.value = prefill;
         $('[data-pw]', body).onclick = function () { passwordStep(normPhone(form.phone.value) || ''); };
         form.addEventListener('submit', function (e) {
@@ -392,7 +526,7 @@
           api('sendOtp', { phone: phone, purpose: 'login' }).then(function (r) { otpStep(phone, r); }).catch(function (err) {
             busy(btn, false);
             if (err.code === 'OTP_WAIT') return otpStep(phone, { resendIn: waitSeconds(err) }); // the OTP sent a moment ago still works
-            if (err.code === 'OTP_OFF') { store.del('st_cfg'); cfgPromise = null; return passwordTabs(); } // OTP was switched off
+            if (err.code === 'OTP_OFF') { store.del('st_cfg'); cfgPromise = null; cfg.otp = false; return passwordTabs(); } // OTP was switched off
             fieldError(form, err.message);
           });
         });
@@ -451,7 +585,7 @@
 
       // OTP switched off: classic tabs
       function passwordTabs() {
-        body.innerHTML = reasonHtml +
+        body.innerHTML = reasonHtml + socialHtml() +
           '<div class="seg-tabs" role="tablist"><button type="button" role="tab" data-tab="login" aria-selected="true">Log in</button><button type="button" role="tab" data-tab="register" aria-selected="false">Create account</button></div>' +
           '<form class="stack" data-form="login" novalidate>' +
           '<label class="field"><span>Mobile number</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" required></label>' +
@@ -471,6 +605,7 @@
           var f1 = $('[data-form="' + name + '"] input', body); if (f1) f1.focus();
         }
         $$('[data-tab]', body).forEach(function (b) { b.onclick = function () { tab(b.dataset.tab); }; });
+        wireSocial();
         tab(startTab === 'register' ? 'register' : 'login');
         $$('form', body).forEach(function (form) {
           form.addEventListener('submit', function (e) {
@@ -483,7 +618,7 @@
             busy(btn, true, reg ? 'Creating account…' : 'Logging in…');
             api(form.dataset.form, d).then(function (r) { finish(r, reg); }).catch(function (err) {
               busy(btn, false);
-              if (err.code === 'OTP_REQUIRED') { store.del('st_cfg'); cfgPromise = null; return phoneStep(normPhone(d.phone)); } // OTP was just switched on
+              if (err.code === 'OTP_REQUIRED') { store.del('st_cfg'); cfgPromise = null; cfg.otp = true; return phoneStep(normPhone(d.phone)); } // OTP was just switched on
               fieldError(form, err.message);
               if (err.code === 'EXISTS') { tab('login'); $('[data-form="login"] [name=phone]', body).value = d.phone; }
             });
@@ -491,9 +626,10 @@
         });
       }
 
-      siteConfig().then(function (cfg) {
+      siteConfig().then(function (c) {
         if (!document.body.contains(m.el)) return;
-        if (cfg && cfg.otp) phoneStep(''); else passwordTabs();
+        cfg = c || {};
+        start();
       });
     });
   }
@@ -503,6 +639,7 @@
     mail: '<path d="M4 5h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm0 2v.4l8 5.1 8-5.1V7H4zm16 2.8-7.5 4.8a1 1 0 0 1-1 0L4 9.8V17h16V9.8z"/>',
     globe: '<path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.35.16-2h4.68c.09.65.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z"/>',
     phone: '<path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1C10.6 21 3 13.4 3 4c0-.6.4-1 1-1h3.4c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>',
+    fb: '<path d="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.3v7A10 10 0 0 0 22 12z"/>',
     wa: '<path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3zm0 16.4c-1.4 0-2.8-.4-4-1.1l-.3-.2-2.7.7.7-2.6-.2-.3A7.4 7.4 0 1 1 12 19.4zm4.1-5.5c-.2-.1-1.3-.7-1.5-.7-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1a6 6 0 0 1-3-2.6c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.7-1.6c-.2-.4-.4-.4-.5-.4h-.4c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2.9 2.3c.1.2 1.6 2.5 4 3.5 1.5.6 2 .7 2.8.6.4-.1 1.3-.5 1.5-1.1.2-.5.2-1 .1-1.1l-.4-.3z"/>',
     chat: '<path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4.3 3.4A.5.5 0 0 1 4 20V5a1 1 0 0 1 0-1zm2 2v10.9L8.3 15H19V6H6z"/>',
     user: '<path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0-2a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zm-8 11c0-3.9 3.6-7 8-7s8 3.1 8 7h-2c0-2.7-2.6-5-6-5s-6 2.3-6 5H4z"/>',
@@ -1129,7 +1266,8 @@
     locationPicker: locationPicker, compressImage: compressImage, leadForm: leadForm, openEnquiry: openEnquiry, INTENTS: INTENTS, otpBox: otpBox, siteConfig: siteConfig,
     BUY_BUDGETS: BUY_BUDGETS, RENT_BUDGETS: RENT_BUDGETS, BUDGET_SALE: BUDGET_SALE, BUDGET_RENT: BUDGET_RENT, budgetOptions: budgetOptions, inBudget: inBudget,
     track: track, leadSource: leadSource, initials: initials, parseAmount: parseAmount, placeSearch: placeSearch, placeSuggest: placeSuggest,
-    verifiedInfo: verifiedInfo, isVerifyTag: isVerifyTag, verifiedTag: verifiedTag, replyNote: replyNote, INTENT_LABEL: INTENT_LABEL
+    verifiedInfo: verifiedInfo, isVerifyTag: isVerifyTag, verifiedTag: verifiedTag, replyNote: replyNote, INTENT_LABEL: INTENT_LABEL,
+    IN_APP: IN_APP, loadScript: loadScript
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

@@ -83,14 +83,14 @@
       var v = el.getAttribute(ATTRS[i]);
       if (!v) continue;
       var t = tr(v);
-      if (t != null) el.setAttribute(ATTRS[i], t);
+      if (t != null && t !== v) el.setAttribute(ATTRS[i], t);   // same text again would loop the observer
     }
     if (el.tagName === 'INPUT' && /^(button|submit|reset)$/i.test(el.type) && el.value) {
-      var tv = tr(el.value); if (tv != null) el.value = tv;
+      var tv = tr(el.value); if (tv != null && tv !== el.value) el.value = tv;
     }
     if (el.tagName === 'OPTGROUP') {
       var l = el.getAttribute('label'), tl = l ? tr(l) : null;
-      if (tl != null) el.setAttribute('label', tl);
+      if (tl != null && tl !== l) el.setAttribute('label', tl);
     }
   }
   function walk(node) {

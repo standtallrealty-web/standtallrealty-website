@@ -667,6 +667,8 @@
     var a = document.activeElement;
     if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;   // do not interrupt someone who is typing
     try { if (sessionStorage.getItem(AUTO)) return; } catch (e) { return; }
+    // In the Android app, only on the first launch: people who installed the app come back often.
+    if (ST.IN_APP) try { if (localStorage.getItem('st_app_chat')) return; localStorage.setItem('st_app_chat', '1'); } catch (e) { return; }
     open(PAGE === 'post' ? 'list' : '', true);
   }
   setTimeout(autoOpen, 3000);

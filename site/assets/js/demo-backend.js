@@ -1,5 +1,5 @@
 /* DEMO MODE ONLY — runs the real backend code inside your browser so the site can be tried before the
-   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611222027. */
+   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611230019. */
 /*
  * Minimal Google Apps Script runtime emulator.
  * Used (1) by the automated tests in Node and (2) by the website's demo mode in the browser,
@@ -433,6 +433,11 @@ var MSGCENTRAL_CUSTOMER_ID = '';  // OR Message Central VerifyNow: Customer ID (
 var MSGCENTRAL_PASSWORD    = '';  //    and your Message Central login password
 var OTP_DAILY_LIMIT    = 300;   // safety cap on OTP SMS per day (protects your SMS balance)
 var OTP_ON_ENQUIRY     = true;  // true = enquiry forms ask the client to verify the number by OTP
+
+// ---- Sign in with Google / Facebook (guide: "Google and Facebook sign-in"). Paste, Save, then deploy a New version.
+var GOOGLE_CLIENT_ID    = '';   // Google Cloud → APIs & Services → Credentials → OAuth client ID (Web application)
+var FACEBOOK_APP_ID     = '';   // Meta for Developers → your app → App ID
+var FACEBOOK_APP_SECRET = '';   // Meta for Developers → App settings → Basic → App secret (it stays private here)
 // =========================================================================
 
 var OTP_DEMO = true;   // website preview only (codes shown on screen). Never true on the live site.
@@ -451,7 +456,7 @@ var SCHEMA = {
     'ownerName', 'ownerRole', 'contactPhone', 'phoneMode', 'views', 'chats', 'rejectReason', 'adminNotes'],
   Leads: ['id', 'createdAt', 'status', 'intent', 'name', 'phone', 'verified', 'email', 'details', 'message', 'listingId',
     'listingTitle', 'page', 'source', 'notes', 'userId', 'followUpAt', 'followUpNote', 'remindedAt'],
-  Users: ['id', 'createdAt', 'name', 'phone', 'verified', 'email', 'status', 'lastLoginAt', 'passHash', 'salt'],
+  Users: ['id', 'createdAt', 'name', 'phone', 'verified', 'email', 'status', 'lastLoginAt', 'passHash', 'salt', 'googleId', 'facebookId'],
   Chats: ['id', 'createdAt', 'updatedAt', 'listingId', 'listingTitle', 'buyerId', 'buyerName', 'ownerId', 'ownerName',
     'lastMessage', 'lastSender', 'buyerUnread', 'ownerUnread', 'phoneStatus', 'log'],
   Messages: ['id', 'chatId', 'createdAt', 'senderRole', 'senderName', 'type', 'text'],
@@ -512,10 +517,12 @@ var ACTIONS = {
   report: { fn: apiReport_, write: true },
   register: { fn: apiRegister_, write: true },
   login: { fn: apiLogin_, write: true },
+  socialLogin: { fn: apiSocialLogin_, write: true },
   // signed-in users
   me: { fn: apiMe_, user: true },
   updateProfile: { fn: apiUpdateProfile_, user: true, write: true },
   changePassword: { fn: apiChangePassword_, user: true, write: true },
+  deleteAccount: { fn: apiDeleteAccount_, user: true, write: true },
   uploadPhoto: { fn: apiUploadPhoto_ },
   submitListing: { fn: apiSubmitListing_, user: true, write: true },
   myListings: { fn: apiMyListings_, user: true },
@@ -598,6 +605,7 @@ function setting_(key, typed) {
 function rememberSettings_() {
   setting_('ADMIN_PASSWORD', ADMIN_PASSWORD); setting_('NOTIFY_EMAIL', NOTIFY_EMAIL); setting_('FAST2SMS_API_KEY', FAST2SMS_API_KEY);
   setting_('FAST2SMS_OTP_ID', FAST2SMS_OTP_ID); setting_('MSGCENTRAL_CUSTOMER_ID', MSGCENTRAL_CUSTOMER_ID); setting_('MSGCENTRAL_PASSWORD', MSGCENTRAL_PASSWORD);
+  setting_('GOOGLE_CLIENT_ID', GOOGLE_CLIENT_ID); setting_('FACEBOOK_APP_ID', FACEBOOK_APP_ID); setting_('FACEBOOK_APP_SECRET', FACEBOOK_APP_SECRET);
 }
 
 // ============================== SHEET LAYER ==============================
@@ -900,7 +908,7 @@ function requireUser_(ctx) {
 
 function userView_(u) {
   return { id: u.id, name: str_(u.name), phone: str_(u.phone), email: str_(u.email), since: ms_(u.createdAt),
-    verified: str_(u.verified) === 'Yes', hasPassword: !!str_(u.passHash) };
+    verified: str_(u.verified) === 'Yes', hasPassword: !!str_(u.passHash), google: !!str_(u.googleId), facebook: !!str_(u.facebookId) };
 }
 
 function userByPhone_(phone) {
@@ -951,6 +959,8 @@ function apiLogin_(b) {
   if (!phone || !pw) throw uerr_('Enter your mobile number and password.', 'VALIDATION');
   if (Number(cache_().get('fail_' + phone) || 0) >= 6) throw uerr_('Too many wrong attempts. Please try again in 15 minutes.', 'RATE');
   var u = userByPhone_(phone);
+  if (u && !str_(u.passHash) && (str_(u.googleId) || str_(u.facebookId)) && !otpOn_())
+    throw uerr_('This account logs in with ' + (str_(u.googleId) ? 'Google' : 'Facebook') + '. Tap "Continue with ' + (str_(u.googleId) ? 'Google' : 'Facebook') + '".', 'USE_SOCIAL');
   if (u && !str_(u.passHash)) throw uerr_('This account logs in with OTP. Choose "Log in with OTP" instead.', 'USE_OTP');
   if (!u || hashPw_(pw, str_(u.salt)) !== str_(u.passHash)) {
     tooMany_('fail_' + phone, 6, 900);
@@ -1010,7 +1020,8 @@ function otpUsage_() {
 }
 
 function apiConfig_() {
-  return { otp: otpOn_(), otpEnquiry: otpOn_() && !!OTP_ON_ENQUIRY };
+  var fb = setting_('FACEBOOK_APP_ID', FACEBOOK_APP_ID) && setting_('FACEBOOK_APP_SECRET', FACEBOOK_APP_SECRET) ? setting_('FACEBOOK_APP_ID', FACEBOOK_APP_ID) : '';
+  return { otp: otpOn_(), otpEnquiry: otpOn_() && !!OTP_ON_ENQUIRY, google: setting_('GOOGLE_CLIENT_ID', GOOGLE_CLIENT_ID), facebook: fb };
 }
 
 /** Sends an OTP to a 10-digit number. purpose: 'login' or 'lead'. */
@@ -1195,6 +1206,129 @@ function apiOtpLogin_(b) {
   var user = userByPhone_(ph);
   if (!user) return { needName: true, proof: phoneProof_(ph), phone: ph };
   return loginUser_(user, true);
+}
+
+// ============================== GOOGLE / FACEBOOK SIGN-IN ==============================
+
+var SOCIAL_NAMES = { google: 'Google', facebook: 'Facebook' };
+
+/** Step 1: {provider:'google', credential} or {provider:'facebook', accessToken}. A known Google/Facebook
+ *  account is logged in. A new one gets {needPhone, proof}: we still need the client's mobile number.
+ *  Step 2: {proof, phone, name, otp?} creates the account, or links it to the number's account after OTP. */
+function apiSocialLogin_(b) {
+  if (b.proof) return socialFinish_(b);
+  var who = b.provider === 'google' ? googleUser_(b.credential) : b.provider === 'facebook' ? facebookUser_(b.accessToken) : null;
+  if (!who) throw uerr_('Choose Google or Facebook.', 'VALIDATION');
+  var user = userBySocial_(who.provider, who.id);
+  if (user) return loginUser_(user, false);
+  return { needPhone: true, provider: who.provider, name: who.name, email: who.email,
+    proof: sign_({ r: 's', pv: who.provider, sid: who.id, em: who.email, nm: who.name, e: Date.now() + 1000 * 60 * 30 }) };
+}
+
+function userBySocial_(provider, id) {
+  var col = provider + 'Id', u = null;
+  if (!id) return null;
+  readAll_('Users').rows.forEach(function (r) { if (str_(r[col]) === id) u = r; });
+  return u;
+}
+
+function socialFinish_(b) {
+  var p = verify_(b.proof);
+  if (!p || p.r !== 's' || !SOCIAL_NAMES[p.pv] || !p.sid) throw uerr_('Your sign-in has expired. Please start again.', 'SOCIAL_EXPIRED');
+  var col = p.pv + 'Id';
+  var done = userBySocial_(p.pv, p.sid);              // finished meanwhile in another tab
+  if (done) return loginUser_(done, false);
+  var phone = normPhone_(b.phone);
+  if (!phone) throw uerr_('Please enter a valid 10-digit mobile number.', 'VALIDATION');
+  var proven = false;
+  if (otpOn_()) {
+    if (!str_(b.otp)) throw uerr_('Please verify your mobile number with OTP.', 'OTP_REQUIRED');
+    checkOtp_(phone, 'login', b.otp);
+    proven = true;
+  }
+  var existing = userByPhone_(phone);
+  if (existing) {
+    // Only the owner of the number (proved by OTP) may add Google/Facebook to an existing account.
+    if (!proven) throw uerr_('This mobile number already has an account. Please log in with your mobile number and password.', 'EXISTS');
+    var patch = {}; patch[col] = p.sid;
+    if (!str_(existing.email) && p.em) patch.email = p.em;
+    updateRow_('Users', existing._row, patch);
+    existing[col] = p.sid; if (patch.email) existing.email = patch.email;
+    var r = loginUser_(existing, true); r.linked = true;
+    return r;
+  }
+  var name = clean_(b.name || p.nm, 60);
+  if (name.length < 2) throw uerr_('Please enter your full name.', 'VALIDATION');
+  if (tooMany_('reg_' + phone, 5, 900)) throw uerr_('Too many attempts. Please try again in 15 minutes.', 'RATE');
+  var u = { id: rid_('U'), createdAt: now_(), name: name, phone: phone, verified: proven ? 'Yes' : '', email: str_(p.em),
+    status: 'Active', lastLoginAt: now_(), passHash: '', salt: '' };
+  u[col] = p.sid;
+  appendObj_('Users', u);
+  return { token: userToken_(u.id), user: userView_(u), created: true };
+}
+
+function socialFail_(provider) { return uerr_(SOCIAL_NAMES[provider] + ' sign-in did not work. Please try again.', 'SOCIAL_FAILED'); }
+
+/** Checks a Google ID token (from "Sign in with Google") with Google, for this website's client ID. */
+function googleUser_(credential) {
+  var clientId = setting_('GOOGLE_CLIENT_ID', GOOGLE_CLIENT_ID);
+  if (!clientId) throw uerr_('Google sign-in is not switched on yet.', 'SOCIAL_OFF');
+  var tok = str_(credential);
+  if (!/^[\w-]+\.[\w-]+\.[\w-]+$/.test(tok) || tok.length > 4096) throw socialFail_('google');
+  var res = UrlFetchApp.fetch('https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(tok), { muteHttpExceptions: true });
+  var t = res.getResponseCode() === 200 ? parseJson_(res.getContentText()) : null;
+  if (!t || t.aud !== clientId || (t.iss !== 'accounts.google.com' && t.iss !== 'https://accounts.google.com') ||
+      !t.sub || !(Number(t.exp) * 1000 > Date.now())) throw socialFail_('google');
+  var email = String(t.email_verified) === 'true' ? clean_(t.email, 120).toLowerCase() : '';
+  return { provider: 'google', id: String(t.sub), name: clean_(t.name || t.given_name, 60), email: validEmail_(email) ? email : '' };
+}
+
+/** Checks a Facebook access token: it must be valid and issued to this website's Facebook app. */
+function facebookUser_(accessToken) {
+  var appId = setting_('FACEBOOK_APP_ID', FACEBOOK_APP_ID), secret = setting_('FACEBOOK_APP_SECRET', FACEBOOK_APP_SECRET);
+  if (!appId || !secret) throw uerr_('Facebook sign-in is not switched on yet.', 'SOCIAL_OFF');
+  var tok = str_(accessToken);
+  if (!/^[\w.|-]{20,1000}$/.test(tok)) throw socialFail_('facebook');
+  var g = 'https://graph.facebook.com/';
+  var dbg = parseJson_(UrlFetchApp.fetch(g + 'debug_token?input_token=' + encodeURIComponent(tok) +
+    '&access_token=' + encodeURIComponent(appId + '|' + secret), { muteHttpExceptions: true }).getContentText());
+  var d = dbg && dbg.data;
+  if (!d || d.is_valid !== true || String(d.app_id) !== String(appId) || !d.user_id) throw socialFail_('facebook');
+  var proof = hex_(Utilities.computeHmacSha256Signature(tok, secret));
+  var me = parseJson_(UrlFetchApp.fetch(g + 'me?fields=id,name,email&access_token=' + encodeURIComponent(tok) +
+    '&appsecret_proof=' + proof, { muteHttpExceptions: true }).getContentText());
+  if (!me || String(me.id) !== String(d.user_id)) throw socialFail_('facebook');
+  var email = clean_(me.email, 120).toLowerCase();
+  return { provider: 'facebook', id: String(me.id), name: clean_(me.name, 60), email: validEmail_(email) ? email : '' };
+}
+
+// ============================== DELETE MY ACCOUNT ==============================
+
+/** {confirm:'DELETE'}. Removes the account and takes the user's listings off the website. Enquiries they sent
+ *  stay with the team as business records, without the link to the account. */
+function apiDeleteAccount_(b, ctx) {
+  if (str_(b.confirm).trim().toUpperCase() !== 'DELETE') throw uerr_('Type DELETE to confirm.', 'VALIDATION');
+  var u = ctx.user, uid = str_(u.id), t = now_(), listings = 0;
+  readAll_('Listings').rows.forEach(function (l) {
+    if (str_(l.ownerId) !== uid) return;
+    listings++;
+    updateRow_('Listings', l._row, { status: 'Deleted', ownerId: '', ownerName: '', contactPhone: '', address: '', updatedAt: t,
+      adminNotes: (str_(l.adminNotes) ? str_(l.adminNotes) + '\n' : '') + 'Owner deleted their account.' });
+  });
+  chatsLite_().rows.forEach(function (c) {
+    var patch = {};
+    if (str_(c.buyerId) === uid) { patch.buyerId = ''; patch.buyerName = 'Deleted user'; }
+    if (str_(c.ownerId) === uid) { patch.ownerId = ''; patch.ownerName = 'Deleted user'; }
+    if (Object.keys(patch).length) updateRow_('Chats', c._row, patch);
+  });
+  readAll_('Leads').rows.forEach(function (l) { if (str_(l.userId) === uid) updateRow_('Leads', l._row, { userId: '' }); });
+  var row = findRow_('Users', uid);
+  if (row > 0) deleteRow_('Users', row);
+  try {
+    notifyAdmin_('Account deleted: ' + str_(u.name), '<p>' + esc_(str_(u.name)) + ' (' + esc_(str_(u.phone)) + ') deleted their account.' +
+      (listings ? ' Their ' + listings + ' listing(s) are now marked Deleted.' : '') + '</p>');
+  } catch (e) {}
+  return { deleted: true };
 }
 
 function apiAdminLogin_(b) {
