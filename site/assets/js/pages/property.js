@@ -91,14 +91,12 @@
       '<section class="pd-section"><h2>Location</h2><p class="pd-loc">' + icon('pin') + esc([L.landmark, L.locality, L.city, L.pincode].filter(Boolean).join(', ')) + '</p>' +
       '<iframe class="map" title="Map of ' + esc(L.locality) + '" loading="lazy" referrerpolicy="no-referrer-when-downgrade" src="https://www.google.com/maps?q=' + encodeURIComponent(q) + '&z=' + (L.lat ? 15 : 14) + '&output=embed"></iframe>' +
       '<p style="margin:10px 0 0"><a href="https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(q) + '" target="_blank" rel="noopener">Open in Google Maps</a></p></section>' +
-      (L.purpose === 'sale' && L.price ? '<section class="pd-section" id="pd-emi"><h2>EMI estimate</h2><div id="mini-emi"></div></section>' : '') +
       '<button class="report-link" type="button" id="report">' + icon('flag') + 'Report this listing</button>' +
       '</div><aside>' + ST.reraBox(L, 'side') + '<div id="contact-col"></div></aside></div>' +
       '<section class="section" id="similar-sec" hidden style="padding-bottom:0"><div class="section-head"><div><h2>Similar properties</h2></div><a class="link-more" href="properties.html?city=' + encodeURIComponent(L.city) + '&seg=' + encodeURIComponent(L.segment) + '">See more</a></div><div class="cards" id="similar"></div></section>';
 
     gallery(photos);
     contactCard();
-    miniEmi();
     similar();
     $('#share').addEventListener('click', share);
     $('#report').addEventListener('click', report);
@@ -194,20 +192,6 @@
   }
 
   // ---- extras
-  function miniEmi() {
-    var box = $('#mini-emi'); if (!box) return;
-    var loan = Math.round(L.price * 0.8 / 100000) * 100000;
-    box.innerHTML = '<div class="grid-3"><label class="field"><span>Loan amount</span><div class="money"><i>₹</i><input id="me-p" inputmode="numeric" value="' + loan.toLocaleString('en-IN') + '"></div></label>' +
-      '<label class="field"><span>Interest (% per year)</span><input id="me-r" inputmode="decimal" value="8.5"></label><label class="field"><span>Years</span><input id="me-n" inputmode="numeric" value="20"></label></div>' +
-      '<p style="margin:14px 0 0;font-size:17px">Estimated EMI: <b id="me-out" style="font-family:var(--serif);font-size:24px"></b> per month</p><p class="small muted" style="margin:4px 0 0">Assumes a loan of 80% of the price. Your bank decides the final rate.</p>';
-    function calc() {
-      var n = function (v) { return Number(String(v).replace(/[^\d.]/g, '')) || 0; };
-      var P = n($('#me-p').value), r = n($('#me-r').value) / 1200, m = n($('#me-n').value) * 12;
-      var e = P && m ? (r ? P * r * Math.pow(1 + r, m) / (Math.pow(1 + r, m) - 1) : P / m) : 0;
-      $('#me-out').textContent = ST.rupees(Math.round(e)) || '₹0';
-    }
-    box.addEventListener('input', calc); calc();
-  }
   function similar() {
     ST.getListings().then(function (all) {
       var list = all.filter(function (x) { return x.id !== L.id && x.segment === L.segment && String(x.city).toLowerCase() === String(L.city).toLowerCase(); })

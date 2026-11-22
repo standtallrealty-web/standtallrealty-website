@@ -73,24 +73,6 @@
     $('#latest').innerHTML = '<div class="empty" style="grid-column:1/-1"><h3>Listings could not load</h3><p>' + esc(err.message) + '</p></div>';
   });
 
-  // ---- EMI calculator
-  function num(v) { return Number(String(v).replace(/[^\d.]/g, '')) || 0; }
-  function emi() {
-    var P = num($('#emi-pv').value), r = num($('#emi-rv').value) / 1200, n = num($('#emi-nv').value) * 12;
-    var e = !P || !n ? 0 : (r ? P * r * Math.pow(1 + r, n) / (Math.pow(1 + r, n) - 1) : P / n);
-    $('#emi-out').textContent = ST.rupees(Math.round(e)) || '₹0';
-    $('#emi-int').textContent = ST.inr(Math.max(0, e * n - P)) || '₹0';
-    $('#emi-tot').textContent = ST.inr(e * n) || '₹0';
-  }
-  function pair(rangeId, inputId, money) {
-    var rg = $(rangeId), inp = $(inputId);
-    rg.addEventListener('input', function () { inp.value = money ? Number(rg.value).toLocaleString('en-IN') : rg.value; emi(); });
-    inp.addEventListener('input', function () { var v = num(inp.value); if (v) rg.value = v; emi(); });
-    inp.addEventListener('blur', function () { if (money) inp.value = num(inp.value).toLocaleString('en-IN'); });
-  }
-  pair('#emi-p', '#emi-pv', true); pair('#emi-r', '#emi-rv'); pair('#emi-n', '#emi-nv');
-  emi();
-
   // ---- enquiry
   ST.leadForm($('#home-lead'), { intent: '' });
   $$('[data-intent-link]').forEach(function (b) {

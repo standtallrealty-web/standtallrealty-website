@@ -971,3 +971,4 @@ a.pill-ver:hover { text-decoration: underline; }
 @media (max-width: 1240px) and (min-width: 1081px) {
   .foot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+@media (max-width: 900px) { .tools .next-panel { order: 2; } }
