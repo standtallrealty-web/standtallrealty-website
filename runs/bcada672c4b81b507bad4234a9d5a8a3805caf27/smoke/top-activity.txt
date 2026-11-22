@@ -1,0 +1,4 @@
+    topResumedActivity=ActivityRecord{31b2644 u0 com.android.chrome/org.chromium.chrome.browser.customtabs.TranslucentCustomTabActivity t8}
+  ResumedActivity: ActivityRecord{31b2644 u0 com.android.chrome/org.chromium.chrome.browser.customtabs.TranslucentCustomTabActivity t8}
+      topResumedActivity=ActivityRecord{fadd163 u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t7}
+  ResumedActivity: ActivityRecord{fadd163 u0 com.google.android.apps.nexuslauncher/.NexusLauncherActivity t7}
