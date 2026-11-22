@@ -30,5 +30,12 @@ if [ -f android/release/stand-tall-realty.aab ]; then
     java -jar bundletool.jar validate --bundle=android/release/stand-tall-realty.aab > out/bundletool-validate.txt 2>&1; echo "exit=$?" >> out/bundletool-validate.txt
   fi
 fi
+# The live website: download page, APK and the app link check file.
+{
+  echo "== /app"; curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://www.standtallrealty.com/app
+  echo "== /app/stand-tall-realty.apk"; curl -sSI https://www.standtallrealty.com/app/stand-tall-realty.apk | grep -iE "^HTTP|content-type|content-length|content-disposition|cache-control"
+  curl -sS -o live.apk https://www.standtallrealty.com/app/stand-tall-realty.apk && sha256sum live.apk
+  echo "== /.well-known/assetlinks.json"; curl -sS -D - https://www.standtallrealty.com/.well-known/assetlinks.json | grep -ivE "^(date|cf-|report-to|nel|server|alt-svc|vary)"
+} > out/live-site.txt 2>&1
 echo "signed=$signed" >> "$GITHUB_OUTPUT"
 ls -la out
