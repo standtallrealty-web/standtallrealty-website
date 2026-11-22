@@ -112,9 +112,12 @@
     if (l.status === 'Pending') actions.push('<button class="btn btn-ghost btn-sm" data-act="approve-feature" data-id="' + l.id + '">Approve and feature</button>');
     if (l.status === 'Pending' || l.status === 'Approved') actions.push('<button class="btn btn-ghost btn-sm" data-act="reject" data-id="' + l.id + '">Reject</button>');
     if (l.status === 'Approved') actions.push('<button class="btn btn-ghost btn-sm" data-act="feature" data-id="' + l.id + '">' + icon('star') + (l.featured === 'Yes' ? 'Remove from home page' : 'Feature on home page') + '</button>', '<button class="btn btn-ghost btn-sm" data-act="' + (l.purpose === 'rent' ? 'rented' : 'sold') + '" data-id="' + l.id + '">Mark ' + (l.purpose === 'rent' ? 'rented' : 'sold') + '</button>');
+    var ver = ST.verifiedInfo(l), vtag = ST.isVerifyTag(l.tag);
+    if (l.status === 'Approved') actions.push('<button class="btn btn-' + (ver ? 'ghost' : 'navy') + ' btn-sm" data-act="verify" data-id="' + l.id + '">' + icon('shield') + (ver ? 'Re-check (Verified)' : vtag ? 'Re-check: badge expired' : 'Mark Stand Tall Verified') + '</button>');
+    if (vtag) actions.push('<button class="btn btn-ghost btn-sm" data-act="unverify" data-id="' + l.id + '">Remove Verified badge</button>');
     actions.push('<a class="btn btn-ghost btn-sm" href="#edit=' + l.id + '">Edit</a>', '<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="property.html?id=' + l.id + '">Preview</a>', '<button class="btn btn-ghost btn-sm" data-act="delete" data-id="' + l.id + '">Delete</button>');
     return '<article class="a-card"><a class="my-thumb" href="property.html?id=' + l.id + '" target="_blank" rel="noopener">' + media + '</a><div>' +
-      '<div><span class="pill ' + (STATUS_PILL[l.status] || '') + '">' + esc(l.status) + '</span> <span class="pill">' + esc(l.segment) + '</span>' + (l.featured === 'Yes' ? ' <span class="pill gold">' + icon('star') + 'Featured</span>' : '') + (l.tag ? ' <span class="pill gold">' + esc(l.tag) + '</span>' : '') + ' <span class="small muted">' + esc(l.id) + '</span></div>' +
+      '<div><span class="pill ' + (STATUS_PILL[l.status] || '') + '">' + esc(l.status) + '</span> <span class="pill">' + esc(l.segment) + '</span>' + (l.featured === 'Yes' ? ' <span class="pill gold">' + icon('star') + 'Featured</span>' : '') + (ver ? ' <span class="pill ok">' + icon('shield') + 'Verified ' + esc(ver.long) + ' · ' + ver.daysLeft + ' days left</span>' : vtag ? ' <span class="pill warn">Verified badge expired</span>' : l.tag ? ' <span class="pill gold">' + esc(l.tag) + '</span>' : '') + ' <span class="small muted">' + esc(l.id) + '</span></div>' +
       '<h3>' + esc(l.title) + '</h3><div class="a-meta"><b style="color:var(--ink)">' + esc(ST.priceLabel(l)) + esc(ST.priceSuffix(l)) + '</b><span>' + esc(ST.placeLabel(l)) + '</span><span>' + (l.photos || []).length + ' photos</span><span>' + (l.views || 0) + ' views</span><span>' + (l.chats || 0) + ' chats</span><span>Posted ' + esc(ST.timeAgo(l.createdAt)) + '</span></div>' +
       owner + (l.description ? '<p class="small muted" style="margin:8px 0 0">' + esc(String(l.description).slice(0, 220)) + (String(l.description).length > 220 ? '…' : '') + '</p>' : '') +
       (l.rejectReason && l.status === 'Rejected' ? '<p class="reject-note">Rejected: ' + esc(l.rejectReason) + '</p>' : '') +
@@ -133,7 +136,35 @@
       if (!ok) return; ST.busy(b, true); ST.api('adminDeleteListing', { id: id }).then(function () { done('Deleted.'); }).catch(fail);
     });
     if (act === 'reject') rejectModal(id);
+    if (act === 'verify') verifyModal(l);
+    if (act === 'unverify') ST.confirmBox('Remove the Verified badge from ' + id + '?', 'The listing stays live, shown as "Reviewed by our team".', 'Remove badge').then(function (ok) {
+      if (!ok) return; ST.busy(b, true); ST.api('adminSetListing', { id: id, tag: '' }).then(function () { listingsCache = null; done('Verified badge removed.'); }).catch(fail);
+    });
   });
+  /** The Stand Tall Promise: a listing is "Verified" only after every check below. The badge carries today's date and drops off after S.verifiedDays days. */
+  function verifyModal(l) {
+    var checks = ['We visited the property and took our own photos', 'We saw the owner\'s ID and an ownership document (sale deed, Index II or similar), and the names match',
+      'The owner confirmed it is still available', 'The ' + (l.purpose === 'rent' ? 'rent' : 'price') + ' shown is confirmed with the owner'];
+    if (l.kind === 'project' || l.reraNumber) checks.push('The MahaRERA number and QR code are on the listing');
+    var days = Number(ST.S.verifiedDays) || 30;
+    var m = ST.openModal({ title: 'Stand Tall Verified: ' + l.id, size: 'sm', body: '<form class="stack" novalidate><p class="small muted" style="margin:0">' + esc(l.title) + '</p>' +
+      '<fieldset class="field"><legend>Tick only what you have checked yourself</legend><div class="stack">' + checks.map(function (c, i) { return '<label class="check"><input type="checkbox" name="c' + i + '"> ' + esc(c) + '</label>'; }).join('') + '</div></fieldset>' +
+      '<p class="small" style="margin:0">The badge shows today\'s date and drops off after ' + days + ' days unless you check again.' + (l.tag && !ST.isVerifyTag(l.tag) ? ' It replaces the tag "' + esc(l.tag) + '".' : '') + '</p>' +
+      '<p class="form-error" role="alert" hidden></p><div class="form-actions"><button class="btn btn-navy btn-block" type="submit">' + icon('shield') + 'Mark Verified today</button></div></form>' });
+    $('form', m.el).addEventListener('submit', function (e) {
+      e.preventDefault();
+      var f = this, b = $('button[type=submit]', f);
+      if ($$('input[type=checkbox]', f).some(function (x) { return !x.checked; })) return ST.fieldError(f, 'Every check must be done before a listing can be called Verified.');
+      ST.busy(b, true);
+      var tag = ST.verifiedTag();
+      ST.api('adminSetListing', { id: l.id, tag: tag }).then(function () { return loadListings(true); }).then(function (all) {
+        var now = all.filter(function (x) { return x.id === l.id; })[0];
+        m.close();
+        if (!now || now.tag !== tag) { ST.toast('Saved, but the badge did not stick. Open Edit and type "' + tag + '" in the Tag box.', 'error'); return route(); }
+        ST.toast('Marked Stand Tall Verified. The badge shows for ' + days + ' days.', 'ok'); route();
+      }).catch(function (err) { ST.busy(b, false); ST.fieldError(f, err.message); });
+    });
+  }
   function rejectModal(id) {
     var reasons = ['Please add clear photos of the property', 'Price or details look incorrect', 'Duplicate listing', 'Could not verify ownership', 'Incomplete address or location'];
     var m = ST.openModal({ title: 'Reject ' + id, size: 'sm', body: '<form class="stack" novalidate><fieldset class="field"><legend>Reason (the owner will see this)</legend><div class="stack">' +
@@ -186,7 +217,7 @@
   // ---------- listings from owner enquiries (website chat or form)
   var OWNER_INTENTS = ['Sell my property', 'Rent out my property', 'Sell a plot / land'];
   function isOwnerLead(l) {
-    return OWNER_INTENTS.indexOf(l.intent) >= 0 || (/^Commercial/.test(l.intent || '') && /Wants to: (Sell|Rent out)/.test(l.details || ''));
+    return OWNER_INTENTS.indexOf(l.intent) >= 0 || /^Free price check/.test(l.intent || '') || (/^Commercial/.test(l.intent || '') && /Wants to: (Sell|Rent out)/.test(l.details || ''));
   }
   /** Reads "Key: value | Key: value" enquiry details into a listing draft for the form. */
   function draftFromLead(l) {
@@ -277,7 +308,7 @@
   // ---------- leads (a small CRM: add, edit, delete, follow-up reminders by email)
   var LEAD_ST = ['New', 'Contacted', 'Site visit', 'Negotiation', 'Closed', 'Not interested'];
   var LEAD_INTENTS = ['Buy a property', 'Take a property on rent', 'Sell my property', 'Rent out my property', 'Buy a plot / land', 'Sell a plot / land',
-    'Commercial – buy / rent / lease', 'New project / investment', 'Other'];
+    'Commercial – buy / rent / lease', 'New project / investment', 'Free price check', 'NRI services', 'Moving to Pune', 'Other'];
   var LEAD_SOURCES = ['Walk-in', 'Phone call', 'WhatsApp', 'Website chat', 'Instagram', 'Facebook', 'YouTube', 'OLX', 'Referral', 'Other'];
   var sel = {};   // selected lead ids
   function endOfToday() { var d = new Date(); d.setHours(23, 59, 59, 999); return d.getTime(); }

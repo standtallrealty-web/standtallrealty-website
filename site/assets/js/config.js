@@ -28,8 +28,20 @@ window.SITE = {
   facebook: '',                   // full page URL (optional)
   youtube: '',                    // full channel URL (optional)
 
-  reraAgentNo: '',           // your MahaRERA agent registration no. — shown in the footer when filled
+  reraAgentNo: '',           // your MahaRERA agent registration no. — shown in the footer, the Promise and project boxes when filled
+  reraExamPassed: true,      // until the number arrives, the Promise says the founder has passed MahaRERA's agent competency exam
   approvalTime: 'within 24 hours',
+
+  // The Stand Tall Promise. Change a value here and the website follows.
+  replyMins: 15,             // "a real person replies within 15 minutes" during office hours
+  openTime: '10:00',         // office hours, India time: replies sent at night say when we will call
+  closeTime: '19:30',
+  verifiedDays: 30,          // a "Stand Tall Verified" badge drops off this many days after the last check
+  priceCheckTime: 'within 24 hours',   // free price check for owners
+  googleReviewUrl: '',       // your Google "Write a review" link: shows "Review us on Google" buttons when filled
+  // Real reviews only (copy them from Google), newest first. The reviews section stays hidden while this is empty.
+  // Example: { name: 'Priya S.', area: 'NIBM', stars: 5, text: 'They found us a 2 BHK in a week.', date: 'Nov 2026' }
+  reviews: [],
   defaultCity: 'Pune',
   focusAreas: ['Baner', 'Wakad', 'Hinjewadi', 'Kothrud', 'Kharadi', 'Viman Nagar', 'Wagholi', 'Hadapsar', 'Kondhwa', 'NIBM', 'Undri', 'Wanowrie'],
   // Building / society name search (Geoapify, OpenStreetMap data). The key is meant to be public; limit it to the site's address in the Geoapify dashboard.

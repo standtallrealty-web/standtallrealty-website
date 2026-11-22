@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611130227';
+  var VER = '202611222015';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -98,6 +98,31 @@
   function listingUrl(id) { return 'property.html?id=' + encodeURIComponent(id); }
   function absUrl(path) { return (S.domain || location.origin) + '/' + path; }
   function placeLabel(l) { return [l.locality, l.city].filter(Boolean).join(', '); }
+
+  // ---------------------------------------------------------------- the Stand Tall Promise: Verified badges and reply times
+  var MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  /** After the checklist, Admin tags a listing "Verified 22 Nov 2026". The badge shows for S.verifiedDays days, then drops off by itself. */
+  function verifiedInfo(l) {
+    var m = /^verified\s+(\d{1,2})\s+([a-z]{3})[a-z]*\.?\s+(\d{4})$/i.exec(String((l && l.tag) || '').trim());
+    if (!m) return null;
+    var mo = MONTHS.map(function (x) { return x.toLowerCase(); }).indexOf(m[2].toLowerCase());
+    if (mo < 0) return null;
+    var age = (Date.now() - new Date(Number(m[3]), mo, Number(m[1])).getTime()) / 864e5;
+    if (isNaN(age) || age < -2 || age > (Number(S.verifiedDays) || 30)) return null;
+    return { short: Number(m[1]) + ' ' + MONTHS[mo], long: Number(m[1]) + ' ' + MONTHS[mo] + ' ' + m[3], daysLeft: Math.max(0, Math.ceil((Number(S.verifiedDays) || 30) - age)) };
+  }
+  function isVerifyTag(tag) { return /^verified\b/i.test(String(tag || '').trim()); }
+  function verifiedTag(d) { d = d || new Date(); return 'Verified ' + d.getDate() + ' ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear(); }
+  /** Pune time, as minutes after midnight, wherever the visitor is. */
+  function istMinutes() { var d = new Date(Date.now() + 330 * 60000); return d.getUTCHours() * 60 + d.getUTCMinutes(); }
+  function hm(s, dflt) { var m = /^(\d{1,2}):(\d{2})$/.exec(String(s || '')); return m ? Number(m[1]) * 60 + Number(m[2]) : dflt; }
+  function timeText(mins) { var h = Math.floor(mins / 60), m = mins % 60; return (h % 12 || 12) + (m ? ':' + (m < 10 ? '0' : '') + m : '') + (h < 12 ? ' am' : ' pm'); }
+  /** What happens after an enquiry: a reply within S.replyMins in office hours, otherwise when we will call. */
+  function replyNote() {
+    var now = istMinutes(), open = hm(S.openTime, 600), close = hm(S.closeTime, 1170);
+    if (now >= open && now < close) return 'A real person from our team will reply within ' + (Number(S.replyMins) || 15) + ' minutes.';
+    return now < open ? 'Our office opens at ' + timeText(open) + '. We will call you soon after.' : 'Our office has closed for the day. We will call you tomorrow after ' + timeText(open) + '.';
+  }
 
   // ---------------------------------------------------------------- lead source (ads tracking)
   (function captureSource() {
@@ -635,7 +660,7 @@
   function card(l, opts) {
     opts = opts || {};
     var media = art(l) + (l.photos && l.photos[0] ? imgTag(l.photos[0], 700, l.title, 'pc-img') : '');
-    var saved = Saved.has(l.id);
+    var saved = Saved.has(l.id), ver = verifiedInfo(l);
     var specs = [];
     if (l.category !== 'Plot' && l.category !== 'Commercial' && bhkLabel(l)) specs.push(icon('bed') + esc(bhkLabel(l)));
     if (areaLabel(l)) specs.push(icon('area') + esc(areaLabel(l)));
@@ -646,7 +671,7 @@
     return '<article class="pcard' + (opts.wide ? ' pcard-wide' : '') + '">' +
       '<a class="pc-media" href="' + listingUrl(l.id) + '" tabindex="-1" aria-hidden="true">' + media +
       '<span class="pc-seg">' + esc(segLabel(l)) + '</span>' +
-      (l.tag ? '<span class="pc-tag">' + esc(l.tag) + '</span>' : '') +
+      (ver ? '<span class="pc-tag pc-ver">' + icon('shield') + 'Verified ' + esc(ver.short) + '</span>' : l.tag && !isVerifyTag(l.tag) ? '<span class="pc-tag">' + esc(l.tag) + '</span>' : '') +
       (l.photoCount > 1 ? '<span class="pc-count">' + icon('camera') + l.photoCount + '</span>' : '') + '</a>' +
       '<button type="button" class="pc-save" data-save="' + esc(l.id) + '" aria-pressed="' + saved + '" aria-label="Save ' + esc(l.title) + '">' + icon(saved ? 'heart' : 'heartOutline') + '</button>' +
       '<div class="pc-body"><p class="pc-price">' + esc(priceLabel(l)) + '<small>' + priceSuffix(l) + '</small></p>' +
@@ -840,16 +865,25 @@
   var RENT_BUDGETS = ['Under ₹15,000', '₹15,000 – ₹25,000', '₹25,000 – ₹40,000', '₹40,000 – ₹60,000', '₹60,000 – ₹1 L', 'Above ₹1 L'];
   function sel(name, label, options, ph) { return '<label class="field"><span>' + label + '</span><select name="' + name + '"><option value="">' + (ph || 'Select') + '</option>' + options.map(function (o) { return '<option>' + esc(o) + '</option>'; }).join('') + '</select></label>'; }
   function txt(name, label, ph, extra) { return '<label class="field"><span>' + label + '</span><input name="' + name + '" placeholder="' + esc(ph || '') + '" ' + (extra || '') + '></label>'; }
-  function chipsField(name, label, options) {
-    return '<fieldset class="field chips-field"><legend>' + label + '</legend><div class="chips">' + options.map(function (o) {
-      return '<label class="chip"><input type="checkbox" name="' + name + '" value="' + esc(o) + '" data-multi="1"><span>' + esc(o) + '</span></label>';
+  function chipsField(name, label, options, radio) {
+    return '<fieldset class="field chips-field"><legend>' + label + '</legend><div class="chips">' + options.map(function (o, i) {
+      return '<label class="chip"><input type="' + (radio ? 'radio' : 'checkbox') + '" name="' + name + '" value="' + esc(o) + '"' + (radio ? (i ? '' : ' checked') : ' data-multi="1"') + '><span>' + esc(o) + '</span></label>';
     }).join('') + '</div></fieldset>';
   }
+  // Enquiry types from the moment-of-need pages: sent to the sheet as plain words, so they read well in Admin → Leads.
+  var INTENT_LABEL = { value: 'Free price check', nri: 'NRI services', relocate: 'Moving to Pune' };
   function intentFields(intent) {
     var area = '<label class="field"><span>Preferred area(s)</span><input name="area" list="lead-areas" placeholder="e.g. Baner, Kharadi, Kothrud"></label>';
     var where = '<label class="field"><span>Where is the property?</span><input name="area" list="lead-areas" placeholder="Locality, city"></label>';
     var types = ['Flat / apartment', 'Bungalow / villa', 'Row house', 'Penthouse'];
     switch (intent) {
+      case 'value': return chipsField('for', 'I want to', ['Sell', 'Rent out'], true) + where + '<div class="grid-2">' + sel('ptype', 'Property type', types.concat(['Shop / office', 'Plot / land'])) + sel('bhk', 'Size', ['1 RK', '1 BHK', '2 BHK', '3 BHK', '4 BHK', '5+ BHK', 'Not applicable']) + '</div>' +
+        '<div class="grid-2">' + txt('society', 'Society or building', 'e.g. Brahma Majestic') + txt('carpet', 'Carpet area <em>(if you know it)</em>', 'e.g. 950 sq ft') + '</div>';
+      case 'nri': return chipsField('need', 'I need help to', ['Rent out my property', 'Look after my property', 'Sell my property', 'Buy in Pune']) +
+        '<div class="grid-2">' + txt('country', 'Country you live in', 'e.g. UAE, USA, UK') + '<label class="field"><span>Area of your Pune property</span><input name="area" list="lead-areas" placeholder="e.g. Kondhwa"></label></div>';
+      case 'relocate': return '<div class="grid-2">' + sel('office', 'Your office is near', ['Hinjewadi', 'Kharadi', 'Magarpatta / Hadapsar', 'Baner / Balewadi', 'Viman Nagar / Yerawada', 'Central Pune', 'Not sure yet']) +
+        sel('when', 'Moving in', ['Within 2 weeks', 'Within a month', '1–3 months', 'Just planning']) + '</div>' + chipsField('deal', 'Looking to', ['Rent', 'Buy'], true) +
+        '<div class="grid-2">' + sel('bhk', 'Size', ['1 RK', '1 BHK', '2 BHK', '3 BHK', '4+ BHK']) + txt('budget', 'Budget', 'e.g. ₹30,000 a month') + '</div>';
       case 'buy': return area + chipsField('bhk', 'Size', ['1 BHK', '2 BHK', '3 BHK', '4+ BHK']) + '<div class="grid-2">' + sel('budget', 'Budget', BUY_BUDGETS) + sel('when', 'When do you plan to buy?', ['Immediately', 'Within 3 months', '3–6 months', 'Just exploring']) + '</div>' + sel('ptype', 'Property type', types, 'Any');
       case 'rent': return area + chipsField('bhk', 'Size', ['1 RK', '1 BHK', '2 BHK', '3 BHK', '4+ BHK']) + '<div class="grid-2">' + sel('budget', 'Monthly rent budget', RENT_BUDGETS) + sel('when', 'Move-in', ['Immediately', 'Within a month', '1–3 months']) + '</div>' + '<div class="grid-2">' + sel('tenant', 'You are', ['Family', 'Bachelor(s)', 'Company lease']) + sel('furnishing', 'Furnishing', ['Any', 'Fully furnished', 'Semi furnished', 'Unfurnished']) + '</div>';
       case 'sell': return where + '<div class="grid-2">' + sel('ptype', 'Property type', types.concat(['Shop / office'])) + sel('bhk', 'Size', ['1 RK', '1 BHK', '2 BHK', '3 BHK', '4 BHK', '5+ BHK', 'Not applicable']) + '</div>' + txt('expected', 'Expected price', 'e.g. ₹85 Lakh');
@@ -861,14 +895,14 @@
       default: return '';
     }
   }
-  var FIELD_NAMES = { area: 'Area', bhk: 'Size', budget: 'Budget', when: 'Timeline', ptype: 'Type', tenant: 'Tenant', furnishing: 'Furnishing', expected: 'Expected', size: 'Size', deal: 'Wants to', possession: 'Possession', calltime: 'Call time', visit: 'Site visit' };
+  var FIELD_NAMES = { 'for': 'For', need: 'Needs', office: 'Office near', area: 'Area', society: 'Society', bhk: 'Size', carpet: 'Carpet area', budget: 'Budget', when: 'Timeline', ptype: 'Type', tenant: 'Tenant', furnishing: 'Furnishing', expected: 'Expected', size: 'Size', deal: 'Wants to', country: 'Country', possession: 'Possession', calltime: 'Call time', visit: 'Site visit' };
   function leadForm(el, opts) {
     opts = opts || {};
     var intents = opts.intents || INTENTS;
     var start = opts.intent || '';
     el.innerHTML =
       '<form class="lead-form stack" novalidate>' +
-      (opts.listing ? '' : '<fieldset class="field intent-pick"><legend>' + esc(opts.question || 'What are you looking for?') + '</legend><div class="intent-grid">' +
+      (opts.listing || opts.fixed ? '' : '<fieldset class="field intent-pick"><legend>' + esc(opts.question || 'What are you looking for?') + '</legend><div class="intent-grid">' +
         intents.map(function (i) { return '<label class="intent"><input type="radio" name="intent" value="' + i[0] + '"' + (i[0] === start ? ' checked' : '') + '><span>' + icon(i[2]) + esc(i[1]) + '</span></label>'; }).join('') + '</div></fieldset>') +
       '<div class="intent-fields stack"></div>' +
       '<div class="grid-2">' + txt('name', 'Your name', '', 'autocomplete="name" required') + txt('phone', 'Mobile number', '10-digit mobile', 'type="tel" inputmode="numeric" autocomplete="tel" required') + '</div>' +
@@ -876,7 +910,7 @@
       (opts.listing && !opts.brochure ? '<label class="check"><input type="checkbox" name="visit"> I would like a site visit</label>' : '') +
       '<label class="field"><span>Message <em>(optional)</em></span><textarea name="message" rows="' + (opts.compact ? 2 : 3) + '" maxlength="1500" placeholder="' + esc(opts.messagePh || 'Anything else we should know?') + '"></textarea></label>' +
       '<input class="hp" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">' +
-      '<p class="small muted consent">By sending this, you agree that Stand Tall Realty may call or WhatsApp you about your enquiry.</p>' +
+      '<p class="small muted consent"><span>By sending this, you agree that Stand Tall Realty may call or WhatsApp you about this enquiry. We never sell your number.</span> <a href="privacy.html">Privacy policy</a></p>' +
       '<div class="form-actions"><button class="btn btn-gold btn-block" type="submit">' + esc(opts.submitLabel || 'Send enquiry') + '</button></div>' +
       '<datalist id="lead-areas">' + (S.focusAreas || []).concat((LOC.localities.Pune || []).slice(0, 80)).filter(function (x, i, a) { return a.indexOf(x) === i; }).map(function (x) { return '<option value="' + esc(x) + '">'; }).join('') + '</datalist>' +
       '</form>';
@@ -892,7 +926,7 @@
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       var d = formData(form), btn = $('button[type=submit]', form);
-      var intent = opts.brochure ? 'Brochure request' : opts.listing ? (d.visit ? 'site_visit' : 'listing') : d.intent;
+      var intent = opts.brochure ? 'Brochure request' : opts.listing ? (d.visit ? 'site_visit' : 'listing') : opts.fixed ? opts.intent : d.intent;
       if (!intent) return fieldError(form, 'Choose what you are looking for.');
       if ((d.name || '').length < 2) { form.name.focus(); return fieldError(form, 'Enter your name.'); }
       if (!normPhone(d.phone)) { form.phone.focus(); return fieldError(form, 'Enter a valid 10-digit mobile number.'); }
@@ -902,10 +936,10 @@
         return v && v !== 'Any time' ? FIELD_NAMES[k] + ': ' + v : '';
       }).filter(Boolean).join(' | ');
       busy(btn, true, 'Sending…');
-      api('lead', { intent: intent, name: d.name, phone: d.phone, email: d.email || '', details: details, message: d.message, company: d.company,
+      api('lead', { intent: INTENT_LABEL[intent] || intent, name: d.name, phone: d.phone, email: d.email || '', details: details, message: d.message, company: d.company,
         listingId: opts.listing ? opts.listing.id : '', listingTitle: opts.listing ? opts.listing.title : '', page: location.pathname.split('/').pop() || 'index.html', source: leadSource() })
         .then(function (r) {
-          var label = (intents.filter(function (i) { return i[0] === intent; })[0] || [0, opts.listing ? 'this property' : 'your enquiry'])[1];
+          var label = INTENT_LABEL[intent] || (intents.filter(function (i) { return i[0] === intent; })[0] || [0, opts.listing ? 'this property' : 'your enquiry'])[1];
           var waText = opts.brochure ? 'Hi Stand Tall Realty, I am ' + d.name + '. Please send me the brochure and price sheet for ' + opts.listing.title + ' (' + opts.listing.id + ').' + (d.message ? ' ' + d.message : '') :
             'Hi Stand Tall Realty, I am ' + d.name + '. ' + (opts.listing ? 'I am interested in ' + opts.listing.id + ' – ' + opts.listing.title + '.' : 'I enquired on your website: ' + label + '.') + (details ? ' ' + details : '');
           var phone = normPhone(d.phone);
@@ -915,8 +949,11 @@
             el.innerHTML = '<div class="lead-done" role="status">' + icon('check', 'ic-done') +
               (opts.brochure ? '<h3>Thanks, ' + first + '. We will send you the brochure.</h3>' : '<h3>Thanks, ' + first + '. We have your enquiry.</h3>') +
               (verified ? '<p class="verified-note">' + icon('shield') + 'Mobile number verified</p>' : '') +
+              '<p class="reply-note">' + esc(replyNote()) + '</p>' +
               (opts.brochure ? '<p>We will WhatsApp the brochure and price sheet to <b>' + esc(fmtPhone(phone)) + '</b>. Want it right now?</p>' +
                 '<a class="btn btn-wa" href="' + wa(waText) + '" target="_blank" rel="noopener">' + icon('wa') + 'Ask on WhatsApp now</a>' :
+                intent === 'value' ? '<p>We will WhatsApp a price estimate to <b>' + esc(fmtPhone(phone)) + '</b> ' + esc(S.priceCheckTime || 'within 24 hours') + '. Want to send photos now?</p>' +
+                '<a class="btn btn-wa" href="' + wa(waText) + '" target="_blank" rel="noopener">' + icon('wa') + 'Continue on WhatsApp</a>' :
                 '<p>Our team will call you on <b>' + esc(fmtPhone(phone)) + '</b> soon. Want a faster reply?</p>' +
                 '<a class="btn btn-wa" href="' + wa(waText) + '" target="_blank" rel="noopener">' + icon('wa') + 'Continue on WhatsApp</a>') +
               (opts.brochure ? '' : '<button type="button" class="btn btn-link" data-again>Send another enquiry</button>') + '</div>';
@@ -982,6 +1019,19 @@
     }
   }
 
+  /** Real client reviews from config.js. The section stays hidden until there is at least one. */
+  function renderReviews(sec) {
+    var list = (S.reviews || []).filter(function (r) { return r && r.name && r.text; });
+    sec.hidden = !list.length;
+    var box = $('[data-review-list]', sec);
+    if (!list.length || !box) return;
+    box.innerHTML = list.slice(0, 6).map(function (r) {
+      var n = Math.max(1, Math.min(5, Math.round(Number(r.stars) || 5)));
+      return '<figure class="review"><p class="stars" role="img" aria-label="' + n + ' out of 5 stars">' + '★★★★★'.slice(0, n) + '<span>' + '★★★★★'.slice(n) + '</span></p>' +
+        '<blockquote data-no-i18n>' + esc(r.text) + '</blockquote><figcaption data-no-i18n><b>' + esc(r.name) + '</b>' + (r.area || r.date ? '<span>' + esc([r.area, r.date].filter(Boolean).join(', ')) + '</span>' : '') + '</figcaption></figure>';
+    }).join('');
+  }
+
   // ---------------------------------------------------------------- page chrome
   function init() {
     renderAccount();
@@ -1003,6 +1053,11 @@
     $$('[data-year]').forEach(function (y) { y.textContent = new Date().getFullYear(); });
     var agentNo = String(S.reraAgentNo || '').trim();
     if (agentNo) $$('[data-rera]').forEach(function (p) { p.textContent = 'MahaRERA agent registration no. ' + agentNo; p.hidden = false; });
+    // The Promise says only what is true today: the agent number once issued, until then the exam passed.
+    $$('[data-rera-yes]').forEach(function (el) { el.hidden = !agentNo; $$('[data-rera-no]', el).forEach(function (b) { b.textContent = agentNo; }); });
+    $$('[data-rera-wait]').forEach(function (el) { el.hidden = !!agentNo || !S.reraExamPassed; });
+    $$('[data-review-link]').forEach(function (a) { a.hidden = !S.googleReviewUrl; if (S.googleReviewUrl && a.tagName === 'A') { a.href = S.googleReviewUrl; a.target = '_blank'; a.rel = 'noopener'; } });
+    $$('[data-reviews]').forEach(renderReviews);
     if (DEMO && page !== 'admin') {
       var bar = document.createElement('div');
       bar.className = 'demo-bar';
@@ -1073,7 +1128,8 @@
     detectLocation: detectLocation, reverseGeocode: reverseGeocode, distanceKm: distanceKm, cityOptions: cityOptions, fillLocalities: fillLocalities,
     locationPicker: locationPicker, compressImage: compressImage, leadForm: leadForm, openEnquiry: openEnquiry, INTENTS: INTENTS, otpBox: otpBox, siteConfig: siteConfig,
     BUY_BUDGETS: BUY_BUDGETS, RENT_BUDGETS: RENT_BUDGETS, BUDGET_SALE: BUDGET_SALE, BUDGET_RENT: BUDGET_RENT, budgetOptions: budgetOptions, inBudget: inBudget,
-    track: track, leadSource: leadSource, initials: initials, parseAmount: parseAmount, placeSearch: placeSearch, placeSuggest: placeSuggest
+    track: track, leadSource: leadSource, initials: initials, parseAmount: parseAmount, placeSearch: placeSearch, placeSuggest: placeSuggest,
+    verifiedInfo: verifiedInfo, isVerifyTag: isVerifyTag, verifiedTag: verifiedTag, replyNote: replyNote, INTENT_LABEL: INTENT_LABEL
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

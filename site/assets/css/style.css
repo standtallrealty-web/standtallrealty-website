@@ -321,7 +321,7 @@ input[type=range] { width: 100%; accent-color: var(--navy); min-height: 0; paddi
 
 /* ---------- footer ---------- */
 .site-footer { background: var(--night); color: #AEBBD0; padding: 60px 0 0; font-size: 15px; }
-.foot-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 36px; }
+.foot-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, .9fr) minmax(0, 1fr) minmax(0, .9fr) minmax(0, 1.3fr); gap: 30px; }
 .site-footer h4 { font: 600 16px var(--sans); color: #fff; margin-bottom: 14px; }
 .site-footer a { color: #D2DCEA; text-decoration: none; }
 .site-footer a:hover { color: var(--gold); text-decoration: underline; }
@@ -893,3 +893,81 @@ body[data-page=chats] .site-header { position: relative; }
 .geo-sug[hidden] { display: none; }
 .geo-sug button { font: inherit; font-size: .85rem; padding: 7px 12px; border-radius: 999px; border: 1px solid var(--line, #d8d2c4); background: #fff; color: inherit; cursor: pointer; text-align: left; }
 .geo-sug button:hover, .geo-sug button:focus-visible { border-color: var(--gold, #b8893b); }
+
+/* ---------- the Stand Tall Promise, moments of need, Verified badges (Nov 2026) ---------- */
+.trust-strip { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 26px; margin-top: 18px; }
+.trust-strip a { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-2); font-weight: 600; font-size: 14.5px; text-decoration: none; }
+.trust-strip a:hover { color: var(--navy); text-decoration: underline; text-decoration-color: var(--gold); }
+.trust-strip .ic { color: var(--gold-2); width: 19px; height: 19px; }
+.needs-sec { padding-bottom: 24px; }
+.needs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.needs .need { display: flex; align-items: center; gap: 12px; padding: 18px; text-decoration: none; color: var(--ink); border-left: 1px solid var(--line); border-top: 1px solid var(--line); font: 600 16.5px/1.25 var(--serif); transition: background .15s; }
+.needs .need:nth-child(5n+1) { border-left: 0; }
+.needs .need:nth-child(-n+5) { border-top: 0; }
+.needs .need:hover { background: #F7F9FC; color: var(--navy); }
+.needs .need .ic { width: 24px; height: 24px; color: var(--steel); flex: none; }
+.promise-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); column-gap: 40px; }
+.promise-grid li { display: grid; grid-template-columns: 46px minmax(0, 1fr); gap: 14px; align-items: start; padding: 18px 0; border-top: 1px solid var(--line); }
+.promise-grid .ring { width: 46px; height: 46px; border-radius: 50%; border: 1.5px solid var(--gold); display: grid; place-items: center; color: var(--gold-2); background: #FFFCF4; }
+.promise-grid .ring .ic { width: 22px; height: 22px; }
+.promise-grid b { display: block; font: 600 18px/1.25 var(--serif); color: var(--ink); margin: 2px 0 3px; }
+.promise-grid p { margin: 0; color: var(--muted); font-size: 15px; }
+.promise-grid p b { display: inline; font: 700 15px/1 var(--sans); color: var(--ink); }
+.steps-light li { background: #F7F9FC; border-color: var(--line); }
+.steps-light b { color: var(--ink); }
+.steps-light span { color: var(--muted); }
+.panel .steps-light { margin-top: 14px; }
+.panel h3 { font-size: 22px; }
+.fee-list { gap: 12px; font-size: 16.5px; max-width: 72ch; }
+.hubs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 32px; }
+.hub { padding: 18px 0; border-top: 1px solid var(--line); }
+.hub h3 { font-size: 19px; margin-bottom: 8px; }
+.hub .quick a { margin: 3px 4px 3px 0; }
+.reviews { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.review { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--r-lg); padding: 22px; }
+.review .stars { margin: 0 0 8px; color: var(--gold-2); letter-spacing: 2px; font-size: 18px; }
+.review .stars span { color: var(--line-2); }
+.review blockquote { margin: 0 0 12px; font: italic 400 17px/1.5 var(--serif); color: var(--ink); }
+.review figcaption b { display: block; }
+.review figcaption span { color: var(--muted); font-size: 14px; }
+.safety-note { display: flex; gap: 10px; align-items: flex-start; background: var(--warn-bg); color: #5C4310; border-radius: var(--r); padding: 12px 14px; margin: 4px 0 18px; font-size: 14.5px; }
+.safety-note .ic { color: var(--warn); margin-top: 1px; }
+.safety-note p { margin: 0; }
+.safety-note a { color: var(--warn); font-weight: 700; }
+.pc-tag.pc-ver { background: var(--ok); color: #fff; display: inline-flex; align-items: center; gap: 4px; }
+.pc-tag.pc-ver .ic { width: 14px; height: 14px; }
+a.pill { text-decoration: none; }
+a.pill-ver:hover { text-decoration: underline; }
+.reply-note { color: var(--ok); font-weight: 600; font-size: 14.5px; margin: 4px 0 10px; }
+.consent a { color: inherit; }
+@media (max-width: 1080px) {
+  .needs { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .needs .need { border-top: 1px solid var(--line); border-left: 0; }
+  .needs .need:nth-child(-n+2) { border-top: 0; }
+  .needs .need:nth-child(odd) { border-right: 1px solid var(--line); }
+  .hubs, .reviews { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .needs .need { padding: 14px 12px; font-size: 15px; gap: 9px; }
+  .needs .need .ic { width: 21px; height: 21px; }
+  .trust-strip { justify-content: flex-start; gap: 8px 18px; }
+  .trust-strip a { font-size: 13.5px; }
+  .promise-grid { grid-template-columns: minmax(0, 1fr); }
+  .hubs, .reviews { grid-template-columns: minmax(0, 1fr); }
+}
+#verified .hl { margin: 6px 0 16px; }
+/* header: seven links fit from 901px up (Sell joined the menu) */
+.main-nav a { white-space: nowrap; }
+@media (max-width: 1180px) and (min-width: 901px) {
+  .acct-label { display: none; }
+  .main-nav { gap: 0; }
+  .main-nav a { padding: 10px 7px; font-size: 14.5px; }
+}
+@media (max-width: 1020px) and (min-width: 901px) {
+  .main-nav a[data-nav="contact"] { display: none; }
+  .header-actions .btn-gold .free { display: none; }
+}
+.foot-contact li > * { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 1240px) and (min-width: 1081px) {
+  .foot-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

@@ -44,7 +44,7 @@
         return ['Hi 👋 Welcome to Stand Tall Realty.', ST.currentListing ? 'Questions about this property, or looking for something else?' : 'What are you looking for?'];
       },
       chips: function () {
-        return (ST.currentListing ? [['about', 'Ask about this property']] : []).concat([['buy', 'Buy a home'], ['rent', 'Rent a home'], ['list', 'List my property']]);
+        return (ST.currentListing ? [['about', 'Ask about this property']] : []).concat([['buy', 'Buy a home'], ['rent', 'Rent a home'], ['list', 'List my property'], ['value', 'Free price check']]);
       },
       strict: true, wa: 'Chat with us on WhatsApp'
     },
@@ -63,7 +63,10 @@
       q: 'Want more options on WhatsApp? Many of our best homes are not online yet. Share your name and number, it takes 10 seconds.',
       chips: [['yes', 'Yes, send me options'], ['no', 'No thanks']], strict: true
     },
-    deal: { q: 'Great! Do you want to sell it or rent it out?', chips: [['sale', 'Sell'], ['rent', 'Rent out']], key: 'deal', strict: true },
+    deal: {
+      q: function (a) { return a.flow === 'value' ? 'Happy to help. Is the price check for selling or for renting out?' : 'Great! Do you want to sell it or rent it out?'; },
+      chips: [['sale', 'Sell'], ['rent', 'Rent out']], key: 'deal', strict: true
+    },
     ptype: { q: 'What kind of property is it?', chips: ['Flat / apartment', 'Bungalow / villa', 'Row house', 'Plot / land', 'Shop / office'], key: 'ptype', strict: true },
     where: { q: 'Which area is it in?', chips: function () { return AREAS.concat(['Other area']); }, ph: 'Or type the area', key: 'area' },
     wherez: ZONE, wherel: LOCS, whereq: SEARCH,
@@ -87,12 +90,13 @@
     confirm: { chips: [['send', 'Looks good, send'], ['again', 'Start again']], strict: true },
     end: { chips: [['restart', 'Start over']], strict: true, wa: 'Chat with us on WhatsApp' },
     retry: { chips: [['send', 'Try again']], strict: true, wa: 'Chat with us on WhatsApp' },
-    done: { chips: [['restart', 'Start over']], strict: true, wa: function (a) { return a.flow === 'list' ? 'Send photos on WhatsApp' : 'Continue on WhatsApp'; } }
+    done: { chips: [['restart', 'Start over']], strict: true, wa: function (a) { return a.flow === 'list' || a.flow === 'value' ? 'Send photos on WhatsApp' : 'Continue on WhatsApp'; } }
   };
   var ORDER = {
     buy: ['area', 'bhk', 'budget', 'results', 'more', 'name', 'phone', 'send'],
     rent: ['area', 'bhk', 'budget', 'tenant', 'results', 'more', 'name', 'phone', 'send'],
     list: ['deal', 'ptype', 'where', 'society', 'obhk', 'size', 'price', 'furnish', 'name', 'phone', 'confirm', 'send'],
+    value: ['deal', 'ptype', 'where', 'society', 'obhk', 'size', 'name', 'phone', 'send'],   // free price check for owners
     about: ['about', 'name', 'phone', 'send']
   };
   function applies(step, a) {
@@ -322,7 +326,7 @@
     var low = text.toLowerCase(), key = function (x) { return String(x).toLowerCase().replace(/[^a-z0-9+]/g, ''); };
     var hit = chipList(step).filter(function (c) { return key(c[1]) === key(text) || key(c[0]) === key(text); })[0];
     if (!hit && step === 'start') {
-      var guess = /\b(sell|list|post|owner)\b/.test(low) ? 'list' : /\brent/.test(low) ? 'rent' : /\b(buy|purchase|flat|bhk|home|house)\b/.test(low) ? 'buy' : '';
+      var guess = /\b(price check|worth|valuation|value)\b/.test(low) ? 'value' : /\b(sell|list|post|owner)\b/.test(low) ? 'list' : /\brent/.test(low) ? 'rent' : /\b(buy|purchase|flat|bhk|home|house)\b/.test(low) ? 'buy' : '';
       if (guess) hit = chipList('start').filter(function (c) { return c[0] === guess; })[0];
     }
     if (hit) return answer(hit[0], text);
@@ -480,8 +484,8 @@
       d.push('Area: ' + (a.area || 'Any area'), 'Size: ' + (a.bhk || 'Any'), 'Budget: ' + (a.budget || 'Not sure'));
       if (a.tenant) d.push('Tenant: ' + a.tenant);
       if (a.seen && a.seen.length) d.push('Saw: ' + a.seen.join(', '));
-    } else if (a.flow === 'list') {
-      intent = ownerIntent(a);
+    } else if (a.flow === 'list' || a.flow === 'value') {
+      intent = a.flow === 'value' ? 'Free price check' : ownerIntent(a);
       if (intent === 'commercial') d.push('Wants to: ' + (a.deal === 'rent' ? 'Rent out' : 'Sell'));
       d.push('For: ' + (a.deal === 'rent' ? 'Rent' : 'Sale'), 'Type: ' + a.ptype);
       if (a.bhk) d.push('BHK: ' + a.bhk);
@@ -540,8 +544,10 @@
     if (a.flow === 'list') {
       bot(esc('Thanks, ' + first + '! We have your property details.'));
       bot(esc('Next, send us 4 to 8 photos on WhatsApp. Our team checks everything and puts your listing live ' + (S.approvalTime || 'within 24 hours') + '.'));
-    } else if (a.flow === 'about') bot(esc('Thanks, ' + first + '! We will call you on ' + ST.fmtPhone(a.phone) + ' soon.'));
+    } else if (a.flow === 'value') bot(esc('Thanks, ' + first + '! We will WhatsApp you a price estimate for your ' + ownerWhat(a) + ' ' + (S.priceCheckTime || 'within 24 hours') + '.'));
+    else if (a.flow === 'about') bot(esc('Thanks, ' + first + '! We will call you on ' + ST.fmtPhone(a.phone) + ' soon.'));
     else bot(esc('Thanks, ' + first + '! We will WhatsApp you matching options on ' + ST.fmtPhone(a.phone) + ' soon.'));
+    bot(esc(ST.replyNote()));
     return queue.then(replies);
   }
 
@@ -551,6 +557,7 @@
     var hi = 'Hi Stand Tall Realty, ' + (a.name ? 'I am ' + a.name + '. ' : '');
     var ref = a.ref ? ' (ref ' + a.ref + ')' : '';
     if (st.step === 'done' && a.flow === 'list') return hi + 'Sending photos of my ' + ownerWhat(a) + ' for ' + (a.deal === 'rent' ? 'rent' : 'sale') + ' in ' + place(a) + ref + '.';
+    if (st.step === 'done' && a.flow === 'value') return hi + 'I asked for a free price check for my ' + ownerWhat(a) + ' in ' + place(a) + ' (to ' + (a.deal === 'rent' ? 'rent out' : 'sell') + ')' + ref + '.';
     if ((st.step === 'done' || st.step === 'end') && (a.flow === 'buy' || a.flow === 'rent')) {
       return hi + 'I am looking for ' + (a.bhk && a.bhk !== 'Any' ? 'a ' + a.bhk + ' home' : 'a home') + (a.flow === 'rent' ? ' on rent' : ' to buy') +
         (a.area && a.area !== 'Any area' ? ' in ' + a.area : '') + (a.budget && a.budget !== 'Not sure' ? ', budget ' + a.budget : '') + ref + '.';

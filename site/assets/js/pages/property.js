@@ -36,11 +36,16 @@
     } else if (L.status && L.status !== 'Approved') {
       banner = '<div class="owner-banner Pending">Admin preview — status: ' + esc(L.status) + '</div>';
     }
+    var ver = ST.verifiedInfo(L);
     var pills = ['<span class="pill gold">' + esc(ST.segLabel(L)) + '</span>'];
-    if (L.tag) pills.push('<span class="pill gold">' + esc(L.tag) + '</span>');
+    if (L.tag && !ST.isVerifyTag(L.tag)) pills.push('<span class="pill gold">' + esc(L.tag) + '</span>');
     if (L.negotiable === 'Yes') pills.push('<span class="pill">Negotiable</span>');
     if (L.reraNumber) pills.push('<span class="pill ok">' + icon('shield') + 'MahaRERA registered</span>');
-    pills.push('<span class="pill">' + icon('check') + 'Reviewed by our team</span>');
+    pills.push(ver ? '<a class="pill ok pill-ver" href="about.html#verified" title="What Stand Tall Verified means">' + icon('shield') + 'Stand Tall Verified, ' + esc(ver.long) + '</a>' :
+      '<span class="pill">' + icon('check') + 'Reviewed by our team</span>');
+    // Honest about what we have not checked yet: owners post for free, so say so and offer to check it.
+    var safety = !ver && !L.isFirm && !L.isOwner ? '<div class="safety-note" role="note">' + icon('shield') + '<p><b>Not yet verified by our team.</b> <span>Visit the home and check the owner\'s ID and ownership papers before you pay any token.</span> ' +
+      '<a href="' + esc(ST.wa('Hi Stand Tall Realty, please check listing ' + L.id + ' for me before I visit.')) + '" target="_blank" rel="noopener">Ask us to check it</a></p></div>' : '';
 
     var facts = [
       fact('Property type', L.propertyType), fact(L.kind === 'project' ? 'Configurations' : 'Size', L.category === 'Residential' ? ST.bhkLabel(L) : ''),
@@ -76,7 +81,7 @@
       (photos.length > 1 ? '<div class="thumbs" id="thumbs">' + photos.map(function (p, i) { return '<button type="button" data-i="' + i + '" aria-label="Photo ' + (i + 1) + '">' + ST.imgTag(p, 240, '') + '</button>'; }).join('') + '</div>' : '') +
       '<div class="price-box"><span class="p">' + esc(ST.priceLabel(L)) + '<small>' + ST.priceSuffix(L) + '</small></span>' +
       (isRent && L.deposit ? '<span class="per">Deposit ' + esc(ST.rupees(L.deposit)) + '</span>' : '') + (perSqft() ? '<span class="per">' + perSqft() + '</span>' : '') + '</div>' +
-      '<p class="tagline">' + pills.join('') + '</p>' + brochureBand +
+      '<p class="tagline">' + pills.join('') + '</p>' + safety + brochureBand +
       '<section class="pd-section"><h2>Key details</h2><dl class="facts">' + facts + '</dl></section>' +
       (priceRows ? '<section class="pd-section"><h2>Price list</h2><table class="price-table">' + priceRows + '</table><p class="small muted" style="margin:10px 0 0">Prices are as shared by the developer and may change. Stamp duty, registration and other charges are extra.</p></section>' : '') +
       (highlights ? '<section class="pd-section"><h2>Highlights</h2><ul class="hl">' + highlights + '</ul></section>' : '') +
