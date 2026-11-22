@@ -1,0 +1,7 @@
+Starting: Intent { cmp=com.standtallrealty.app/com.google.androidbrowserhelper.trusted.LauncherActivity }
+Status: ok
+LaunchState: COLD
+Activity: com.standtallrealty.app/com.google.androidbrowserhelper.trusted.LauncherActivity
+TotalTime: 2137
+WaitTime: 2148
+Complete
