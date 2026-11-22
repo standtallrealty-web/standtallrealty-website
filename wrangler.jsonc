@@ -12,6 +12,7 @@
       "/property",
       "/property-in-*",
       "/sitemap.xml",
+      "/.well-known/assetlinks.json",
       "/about.html",
       "/account.html",
       "/admin.html",

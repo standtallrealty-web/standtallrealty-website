@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Stand Tall Realty</string>
+    <string name="launcher_name">Stand Tall</string>
+    <string name="launch_url" translatable="false">https://www.standtallrealty.com/?utm_source=android_app&amp;utm_medium=app</string>
+    <string name="provider_authority" translatable="false">com.standtallrealty.app.fileprovider</string>
+    <string name="asset_statements" translatable="false">[{\"relation\": [\"delegate_permission/common.handle_all_urls\"], \"target\": {\"namespace\": \"web\", \"site\": \"https://www.standtallrealty.com\"}}]</string>
+
+    <string name="sc_buy">Buy a home</string>
+    <string name="sc_rent">Rent a home</string>
+    <string name="sc_sell">Sell my property</string>
+    <string name="sc_sell_long">Sell or rent out my property</string>
+    <string name="sc_price">Free price check</string>
+    <string name="sc_price_long">Free price check for my home</string>
+</resources>

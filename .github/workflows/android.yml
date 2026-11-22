@@ -1,0 +1,101 @@
+# Builds the Stand Tall Realty Android app (android/) and checks it.
+# The build here is unsigned. The signing key never comes to GitHub: the APK and app bundle are
+# signed on a private machine and saved in android/release/, where this workflow checks them with
+# Google's own tools (apksigner, bundletool) and opens the app on an Android emulator.
+# Results go to the "android-builds" branch, in runs/<commit>/.
+name: Android app
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-app
+  cancel-in-progress: false
+
+env:
+  BUILD_TOOLS: '36.0.0'
+
+jobs:
+  build:
+    name: Build and check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      signed: ${{ steps.check.outputs.signed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Android SDK packages
+        shell: bash
+        run: |
+          SDKM="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKM" --licenses > /dev/null || true
+          "$SDKM" --install "platforms;android-36" "build-tools;${BUILD_TOOLS}" > /dev/null
+
+      - name: Build the unsigned release APK and app bundle
+        shell: bash
+        working-directory: android
+        run: gradle --no-daemon --stacktrace assembleRelease bundleRelease 2>&1 | tee ../gradle.log
+
+      - name: Check outputs
+        id: check
+        if: always()
+        shell: bash
+        run: bash android/ci/check.sh
+
+      - name: Save results
+        if: always()
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash android/ci/publish.sh out "runs/${GITHUB_SHA}/build"
+
+  smoke:
+    name: Open the signed app on an emulator
+    needs: build
+    if: needs.build.outputs.signed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Android 14 emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash android/ci/smoke.sh
+
+      - name: Save results
+        if: always()
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash android/ci/publish.sh smoke-out "runs/${GITHUB_SHA}/smoke"

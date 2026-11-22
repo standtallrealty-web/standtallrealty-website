@@ -1,0 +1,5 @@
+// Stand Tall Realty Android app: a Trusted Web Activity that opens www.standtallrealty.com
+// full screen in Chrome. Same versions as Google's android-browser-helper 2.7.4 release.
+plugins {
+    id 'com.android.application' version '8.9.1' apply false
+}

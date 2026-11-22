@@ -6,6 +6,8 @@
                               data and text already in the HTML, so Google can read it without running JavaScript.
    - /property-in-*        -> the area page with links to that area's live listings.
    - /sitemap.xml          -> static pages, area pages and every live listing.
+   - /.well-known/assetlinks.json -> tells Chrome that the Android app (android/) belongs to this website,
+                              so the app can show the site full screen and website links open in the app.
    Listing data comes from the Google Apps Script API (the same one the website uses) and is cached for 15 minutes.
    If the API is slow or down, visitors still get the normal page. */
 
@@ -13,12 +15,19 @@ const SITE = 'https://www.standtallrealty.com';
 const BRAND = 'Stand Tall Realty';
 const TTL = 900;            // seconds to keep API answers in the edge cache
 const TIMEOUT = 8000;       // ms to wait for Apps Script
+// Android app signing keys (SHA-256). The first is the Stand Tall upload key (the APK on /app).
+// After the first Google Play upload, add Play's app signing key from Play Console > App integrity.
+const ANDROID_PACKAGE = 'com.standtallrealty.app';
+const ANDROID_APP_FINGERPRINTS = [
+  'C7:05:49:4B:75:40:E8:23:8E:9D:0B:37:C1:69:DA:CC:08:50:D0:62:20:6A:58:1B:86:F4:B4:5C:96:33:3E:73'
+];
 const SSR_MARK = '<!--area-ssr--><div class="skeleton" style="min-height:280px;grid-column:1/-1"></div>';
 
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
+    if (path === '/.well-known/assetlinks.json') return assetLinks();
     try {
       if (path.endsWith('.html')) return cleanUrl(request, env, url);
       if (path === '/property') return await propertyPage(request, env, ctx, url);
@@ -30,6 +39,17 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
+
+// ------------------------------------------------------------------ Android app link check
+function assetLinks() {
+  const body = JSON.stringify([{
+    relation: ['delegate_permission/common.handle_all_urls'],
+    target: { namespace: 'android_app', package_name: ANDROID_PACKAGE, sha256_cert_fingerprints: ANDROID_APP_FINGERPRINTS }
+  }], null, 2);
+  return new Response(body, { headers: {
+    'content-type': 'application/json', 'cache-control': 'public, max-age=3600', 'access-control-allow-origin': '*'
+  } });
+}
 
 // ------------------------------------------------------------------ /x.html -> /x
 function cleanUrl(request, env, url) {

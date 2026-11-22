@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon to see these. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="buy"
+        android:enabled="true"
+        android:icon="@drawable/ic_sc_buy"
+        android:shortcutShortLabel="@string/sc_buy"
+        android:shortcutLongLabel="@string/sc_buy">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.standtallrealty.app"
+            android:targetClass="com.google.androidbrowserhelper.trusted.ShortcutTrampolineActivity"
+            android:data="https://www.standtallrealty.com/properties?purpose=sale&amp;utm_source=android_app&amp;utm_medium=shortcut" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="rent"
+        android:enabled="true"
+        android:icon="@drawable/ic_sc_rent"
+        android:shortcutShortLabel="@string/sc_rent"
+        android:shortcutLongLabel="@string/sc_rent">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.standtallrealty.app"
+            android:targetClass="com.google.androidbrowserhelper.trusted.ShortcutTrampolineActivity"
+            android:data="https://www.standtallrealty.com/properties?purpose=rent&amp;utm_source=android_app&amp;utm_medium=shortcut" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="sell"
+        android:enabled="true"
+        android:icon="@drawable/ic_sc_sell"
+        android:shortcutShortLabel="@string/sc_sell"
+        android:shortcutLongLabel="@string/sc_sell_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.standtallrealty.app"
+            android:targetClass="com.google.androidbrowserhelper.trusted.ShortcutTrampolineActivity"
+            android:data="https://www.standtallrealty.com/owners?utm_source=android_app&amp;utm_medium=shortcut#sell" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="price"
+        android:enabled="true"
+        android:icon="@drawable/ic_sc_price"
+        android:shortcutShortLabel="@string/sc_price"
+        android:shortcutLongLabel="@string/sc_price_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetPackage="com.standtallrealty.app"
+            android:targetClass="com.google.androidbrowserhelper.trusted.ShortcutTrampolineActivity"
+            android:data="https://www.standtallrealty.com/owners?utm_source=android_app&amp;utm_medium=shortcut#price-check" />
+    </shortcut>
+</shortcuts>

@@ -1,0 +1,44 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.standtallrealty.app'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.standtallrealty.app'
+        minSdk 24
+        targetSdk 36
+        // Raise both for every new upload to Google Play.
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    buildTypes {
+        release {
+            // The release build is left unsigned here. It is signed afterwards with the
+            // Stand Tall upload key, which is never stored in this public repository.
+            minifyEnabled true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lint {
+        checkReleaseBuilds false
+    }
+
+    dependenciesInfo {
+        includeInApk false
+        includeInBundle true
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.7.4'
+}
