@@ -1,0 +1,5 @@
+  com.standtallrealty.app:
+    ID: 982e3479-1801-4f19-851e-e3f2c0f08b95
+    Signatures: [C7:05:49:4B:75:40:E8:23:8E:9D:0B:37:C1:69:DA:CC:08:50:D0:62:20:6A:58:1B:86:F4:B4:5C:96:33:3E:73]
+    Domain verification state:
+      www.standtallrealty.com: verified

@@ -1,0 +1,3 @@
+    versionCode=2 minSdk=24 targetSdk=36
+    versionName=1.1.0
+    signatures=PackageSignatures{341c4c1 version:2, signatures:[a44d704d], past signatures:[]}
