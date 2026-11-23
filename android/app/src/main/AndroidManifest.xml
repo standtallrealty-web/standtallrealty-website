@@ -34,8 +34,9 @@
                 android:value="@string/launch_url" />
         </activity>
 
+        <!-- StartActivity shows the logo for about a second, then opens the website. -->
         <activity
-            android:name="com.google.androidbrowserhelper.trusted.LauncherActivity"
+            android:name=".StartActivity"
             android:alwaysRetainTaskState="true"
             android:exported="true"
             android:label="@string/launcher_name">

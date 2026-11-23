@@ -14,8 +14,10 @@ adb shell am set-debug-app --persistent com.android.chrome || true
 adb install -r android/release/stand-tall-realty.apk > "$OUT/install.txt" 2>&1; echo "exit=$?" >> "$OUT/install.txt"
 adb shell dumpsys package $PKG | grep -E "versionName|versionCode|targetSdk|minSdk|signatures" > "$OUT/package.txt" || true
 adb logcat -c
-adb shell am start -W -n $PKG/com.google.androidbrowserhelper.trusted.LauncherActivity > "$OUT/start.txt" 2>&1
-sleep 4
+adb shell am start -W -n $PKG/.StartActivity > "$OUT/start.txt" 2>&1
+sleep 0.5
+adb exec-out screencap -p > "$OUT/0-logo.png"
+sleep 3
 adb exec-out screencap -p > "$OUT/0-splash.png"
 sleep 30
 adb exec-out screencap -p > "$OUT/1-home.png"
