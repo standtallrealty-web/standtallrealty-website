@@ -1,5 +1,5 @@
 /* DEMO MODE ONLY — runs the real backend code inside your browser so the site can be tried before the
-   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611232305. */
+   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611232314. */
 /*
  * Minimal Google Apps Script runtime emulator.
  * Used (1) by the automated tests in Node and (2) by the website's demo mode in the browser,
@@ -336,7 +336,8 @@
       getActiveUser: function () { return { getEmail: function () { return opts.email || 'owner@example.com'; } }; },
       getScriptTimeZone: function () { return 'Asia/Kolkata'; }
     };
-    var Logger = { log: function () { if (opts.verbose) console.log.apply(console, arguments); } };
+    var logs = [];
+    var Logger = { log: function () { logs.push([].slice.call(arguments).join(' ')); if (opts.verbose) console.log.apply(console, arguments); } };
 
     // ---------- ScriptApp: time triggers are only recorded (tests call the handler themselves) ----------
     state.triggers = state.triggers || [];
@@ -376,7 +377,7 @@
     return {
       SpreadsheetApp: SpreadsheetApp, CacheService: CacheService, PropertiesService: PropertiesService, LockService: LockService,
       Utilities: Utilities, DriveApp: DriveApp, MailApp: MailApp, ContentService: ContentService, Session: Session, Logger: Logger,
-      UrlFetchApp: UrlFetchApp, ScriptApp: ScriptApp, __fetches: fetches,
+      UrlFetchApp: UrlFetchApp, ScriptApp: ScriptApp, __fetches: fetches, __logs: logs,
       __state: function () { return state; }, __mails: mails, __flush: flush,
       __file: function (id) { return state.files[id] || null; },
       __sha256hex: function (s) { return sha256(utf8(s)).map(function (b) { return ('0' + b.toString(16)).slice(-2); }).join(''); },
@@ -488,6 +489,42 @@ function setup() {
   Logger.log(ensureFollowUpTrigger_() ? '✅ Follow-up email reminders are on (checked every minute).' : '⚠️ Could not switch on follow-up reminders. Run setup again and allow access.');
   Logger.log('✅ Setup complete. Sheet: ' + ss.getUrl());
   Logger.log('Next: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).');
+}
+
+/** WhatsApp login, one time: run this from the editor (▶ Run) after adding the login number in Meta.
+ *  Needs WHATSAPP_TOKEN (the temporary token from WhatsApp → API Setup is fine) and WHATSAPP_PHONE_ID.
+ *  It switches the number on for messages (Meta calls this "register"), links it to your app and checks the webhook. */
+function whatsappSetup() {
+  REQ = { memo: {} };
+  rememberSettings_();
+  var token = setting_('WHATSAPP_TOKEN', WHATSAPP_TOKEN), id = setting_('WHATSAPP_PHONE_ID', WHATSAPP_PHONE_ID);
+  if (!token || !id) return Logger.log('⚠️ First type WHATSAPP_TOKEN and WHATSAPP_PHONE_ID in the settings at the top, tap Save, then Run again.');
+  var G = 'https://graph.facebook.com/v26.0/';
+  function call(method, path, payload) {
+    var o = { method: method, muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + token } };
+    if (payload) { o.contentType = 'application/json'; o.payload = JSON.stringify(payload); }
+    var r = UrlFetchApp.fetch(G + path, o), j = parseJson_(r.getContentText()) || {};
+    return { ok: r.getResponseCode() < 300 && !j.error, j: j, err: j.error ? str_(j.error.message) + (j.error.code ? ' (code ' + j.error.code + ')' : '') : 'HTTP ' + r.getResponseCode() };
+  }
+  var info = call('get', encodeURIComponent(id) + '?fields=display_phone_number,verified_name,name_status');
+  if (!info.ok) return Logger.log('❌ Meta did not accept the token or the Phone number ID: ' + info.err + '. Copy both again from WhatsApp → API Setup.');
+  Logger.log('Number: ' + info.j.display_phone_number + '   Display name: ' + info.j.verified_name + ' (' + str_(info.j.name_status).toLowerCase().replace(/_/g, ' ') + ')');
+  var props = PropertiesService.getScriptProperties(), pin = props.getProperty('WA_PIN');
+  if (!pin) { pin = String(100000 + Math.floor(Math.random() * 900000)); props.setProperty('WA_PIN', pin); }
+  var reg = call('post', encodeURIComponent(id) + '/register', { messaging_product: 'whatsapp', pin: pin });
+  if (!reg.ok) return Logger.log('❌ Could not switch the number on: ' + reg.err + (/133005|PIN/i.test(reg.err) ? '. This number already has a two-step PIN: in WhatsApp Manager → Phone numbers → the number → Two-step verification, set the PIN to ' + pin + ', then Run again.' : ''));
+  Logger.log('✅ Number switched on for WhatsApp messages. Its two-step PIN is ' + pin + ' (note it down; Meta asks for it only if you move the number).');
+  var dbg = call('get', 'debug_token?input_token=' + encodeURIComponent(token)), wabas = {};
+  ((dbg.j.data && dbg.j.data.granular_scopes) || []).forEach(function (g) { (g.target_ids || []).forEach(function (w) { if (/whatsapp/.test(g.scope)) wabas[w] = 1; }); });
+  Object.keys(wabas).forEach(function (w) {
+    var sub = call('post', encodeURIComponent(w) + '/subscribed_apps');
+    Logger.log(sub.ok ? '✅ App linked to WhatsApp account ' + w + ' (messages will reach the website).' : '⚠️ Could not link the app to WhatsApp account ' + w + ': ' + sub.err);
+  });
+  var hook = call('get', encodeURIComponent(id) + '?fields=webhook_configuration'), url = str_(((hook.j.webhook_configuration) || {}).application);
+  Logger.log(/standtallrealty\.com\/wa-hook/.test(url) ? '✅ Webhook: ' + url
+    : '⚠️ Webhook not set yet. In Meta: WhatsApp → Configuration → Callback URL  https://www.standtallrealty.com/wa-hook  and Verify token  standtall-whatsapp-login, then subscribe to "messages".');
+  Logger.log(waOn_() ? '✅ WHATSAPP_LOGIN_NUMBER and WHATSAPP_APP_SECRET are set. Deploy a New version, then test: website → Log in → Continue with WhatsApp.'
+    : '⚠️ Still to do: type WHATSAPP_LOGIN_NUMBER (91 + the number) and WHATSAPP_APP_SECRET, Save, then Deploy a New version.');
 }
 
 function doGet(e) {
@@ -1400,8 +1437,9 @@ function apiWaHook_(b) {
       (v.contacts || []).forEach(function (c) { names[str_(c.wa_id)] = c.profile && c.profile.name; });
       (v.messages || []).forEach(function (msg) {
         var from = str_(msg.from), text = msg.type === 'text' && msg.text ? str_(msg.text.body) : '';
+        if (msg.id) { if (cache_().get('wamid_' + str_(msg.id).slice(-80))) return; cache_().put('wamid_' + str_(msg.id).slice(-80), '1', 21600); }   // Meta may deliver twice
         var m = text.match(WA_CODE_RE);
-        if (!m) { waReply_(from, 'This WhatsApp number is only for logging in to ' + BRAND + '. To talk to our team, message +91 ' + FIRM_PHONE.slice(0, 5) + ' ' + FIRM_PHONE.slice(5) + ' on WhatsApp.'); return; }
+        if (!m) { waLead_(from, names[from], text || '(' + (str_(msg.type) || 'other') + ' message)'); return; }
         var key = 'wa_ST-' + m[1].toUpperCase(), w = parseJson_(cache_().get(key) || '');
         if (!w) { waReply_(from, 'This login code has expired. Please tap Continue with WhatsApp again.'); return; }
         if (w.s !== 'wait') return;                                   // the same message delivered twice
@@ -1415,6 +1453,19 @@ function apiWaHook_(b) {
     });
   });
   return { done: done };
+}
+
+/** Someone wrote to the login number without a login code: nobody reads that number, so the message goes to the
+ *  team as an enquiry (WhatsApp proves the number) and, with a token, the client is pointed to the team's number. */
+function waLead_(from, name, text) {
+  var phone = normPhone_(from);
+  if (phone && !tooMany_('walead_' + phone, 3, 3600)) {
+    saveLead_({ intent: INTENTS.other, name: clean_(name || '', 80) || 'WhatsApp client', phone: phone, email: '', details: '',
+      message: clean_(text, 1500), listingId: '', listingTitle: '', page: '', source: 'WhatsApp login number', userId: '', verified: 'Yes' },
+      true, 'Sent to the WhatsApp login number. Please reply from +91 ' + FIRM_PHONE.slice(0, 5) + ' ' + FIRM_PHONE.slice(5) + '.');
+  }
+  waReply_(from, 'This WhatsApp number is only for logging in to ' + BRAND + '. Our team will reply to you from +91 ' +
+    FIRM_PHONE.slice(0, 5) + ' ' + FIRM_PHONE.slice(5) + '. You can also message that number on WhatsApp.');
 }
 
 /** Optional reply from the login number. Only when a token is set (Meta may charge for replies). */
