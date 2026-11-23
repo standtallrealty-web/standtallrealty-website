@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611230019';
+  var VER = '202611232305';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -395,23 +395,130 @@
 
   // ---------------------------------------------------------------- login / sign-up modal
   // OTP on (Code.gs has an SMS key): mobile → OTP → name for new numbers. OTP off: password log in / create account.
-  function openLogin(reason, startTab) {
+  // opts.container: draw the login inside this element (the login page, the app's first screen) instead of a window.
+  function openLogin(reason, startTab, opts) {
+    opts = opts || {};
     return new Promise(function (resolve, reject) {
-      var done = false;
-      var m = openModal({ title: 'Log in or sign up', size: 'sm', body: '<div class="skeleton" style="min-height:190px"></div>',
-        onClose: function () { if (!done) reject(new ApiError('Login cancelled', 'CANCELLED')); } });
+      var done = false, m;
+      if (opts.container) {
+        opts.container.innerHTML = '<h1 class="login-title">Log in or sign up</h1><div class="login-body"><div class="skeleton" style="min-height:190px"></div></div>';
+        m = { el: opts.container, body: $('.login-body', opts.container), close: function () {} };
+      } else {
+        m = openModal({ title: 'Log in or sign up', size: 'sm', body: '<div class="skeleton" style="min-height:190px"></div>',
+          onClose: function () { waStop(); if (!done) reject(new ApiError('Login cancelled', 'CANCELLED')); } });
+      }
       var body = m.body;
       var reasonHtml = reason ? '<p class="modal-reason">' + esc(reason) + '</p>' : '';
       var terms = '<p class="small muted center">By continuing you agree to our <a href="terms.html" target="_blank">terms</a> and <a href="privacy.html" target="_blank">privacy policy</a>.</p>';
-      function title(t) { $('h2', m.el).textContent = t; }
+      function title(t) { var h = $(opts.container ? '.login-title' : 'h2', m.el); if (h) h.textContent = t; }
       function focusFirst() { focusSoon(function () { return $('input:not([type=hidden])', body); }, body, 40); }
-      var cfg = {};   // site settings: OTP on? Google / Facebook IDs
+      var cfg = {};   // site settings: OTP on? WhatsApp login on? Google / Facebook IDs
+      function hasMethods() { return !!(cfg.wa || cfg.google || cfg.facebook); }
       function socialHtml() {
         if (!cfg.google && !cfg.facebook) return '';
-        return '<div class="social-login">' +
-          (cfg.google ? '<div class="g-btn" data-google><button type="button" class="btn btn-ghost btn-block" disabled>Continue with Google</button></div>' : '') +
-          (cfg.facebook ? '<button type="button" class="btn btn-fb btn-block" data-facebook>' + icon('fb') + 'Continue with Facebook</button>' : '') +
-          '<p class="social-msg small" role="alert" hidden></p><p class="or-line"><span>or use your mobile number</span></p></div>';
+        return (cfg.google ? '<div class="g-btn" data-google><button type="button" class="btn btn-ghost btn-block" disabled>Continue with Google</button></div>' : '') +
+          (cfg.facebook ? '<button type="button" class="btn btn-fb btn-block" data-facebook>' + icon('fb') + 'Continue with Facebook</button>' : '');
+      }
+      function backHtml() { return hasMethods() ? '<p class="center" style="margin:0"><button type="button" class="btn-link" data-back>Other ways to log in</button></p>' : ''; }
+      function wireBack() { var b = $('[data-back]', body); if (b) b.onclick = function () { waStop(); methodsStep(); }; }
+
+      // First screen when WhatsApp, Google or Facebook login is on: one big button each.
+      function methodsStep() {
+        title(opts.container ? 'Log in or sign up' : 'Log in or sign up');
+        body.innerHTML = reasonHtml + '<div class="social-login">' +
+          (cfg.wa ? '<button type="button" class="btn btn-wa btn-block" data-wa>' + icon('wa') + 'Continue with WhatsApp</button>' : '') +
+          socialHtml() + '<p class="social-msg small" role="alert" hidden></p></div>' +
+          '<p class="center" style="margin:4px 0 0"><button type="button" class="btn-link" data-phone>' +
+          (cfg.wa ? 'Log in with mobile number and password' : 'Use my mobile number') + '</button></p>' + terms;
+        if (cfg.wa) $('[data-wa]', body).onclick = function () { waStep('login'); };
+        $('[data-phone]', body).onclick = function () { if (cfg.otp) phoneStep(''); else passwordTabs(); };
+        wireSocial();
+      }
+
+      // ---- WhatsApp: the client sends a short code from their own WhatsApp, so WhatsApp tells us their number.
+      // Free for both sides. mode 'login' logs in; mode 'phone' only proves the number (after Google / Facebook).
+      var waTimer = null, waVisible = null;
+      function waStop() {
+        if (waTimer) { clearTimeout(waTimer); waTimer = null; }
+        if (waVisible) { document.removeEventListener('visibilitychange', waVisible); waVisible = null; }
+      }
+      function waStep(mode, onProof) {
+        waStop();
+        title(mode === 'phone' ? 'Add your mobile number' : 'Continue with WhatsApp');
+        body.innerHTML = '<div class="wa-step stack">' +
+          '<ol class="wa-how"><li>Tap Open WhatsApp.</li><li>WhatsApp opens with a code already typed. Tap Send.</li>' +
+          '<li>' + (mode === 'phone' ? 'Come back here. Your number is added.' : 'Come back here. You are logged in.') + '</li></ol>' +
+          '<a class="btn btn-wa btn-block" data-wa-open href="#" aria-disabled="true">' + icon('wa') + 'Open WhatsApp</a>' +
+          '<p class="wa-status small" role="status" hidden></p>' +
+          '<p class="wa-manual small muted" hidden></p>' +
+          (mode === 'phone' ? '' : backHtml()) + '</div>';
+        if (mode !== 'phone') wireBack();
+        var open = $('[data-wa-open]', body), status = $('.wa-status', body), started = null, opened = false, ends = 0;
+        function say(t, bad) { status.hidden = !t; status.textContent = t || ''; status.classList.toggle('bad', !!bad); }
+        function restart(t) {
+          waStop(); say(t, true);
+          open.textContent = 'Start again'; open.setAttribute('href', '#'); open.removeAttribute('aria-disabled');
+          open.onclick = function (e) { e.preventDefault(); waStep(mode, onProof); };
+        }
+        api('waStart', { mode: mode }).then(function (r) {
+          if (!document.body.contains(open)) return;
+          started = r; ends = Date.now() + (r.expiresIn || 900) * 1000;
+          var android = /Android/i.test(navigator.userAgent);
+          // Android: open the WhatsApp app and keep this page, so it can finish the login when the client comes back.
+          var href = android ? 'intent://send/?phone=' + r.number + '&text=' + encodeURIComponent(r.text) +
+            '#Intent;scheme=whatsapp;S.browser_fallback_url=' + encodeURIComponent(r.link) + ';end' : r.link;
+          open.setAttribute('href', href); open.removeAttribute('aria-disabled');
+          if (!android) { open.target = '_blank'; open.rel = 'noopener'; }
+          var manual = $('.wa-manual', body);
+          manual.textContent = 'No WhatsApp on this device? From your phone, send ' + r.code + ' to +' + r.number + ' on WhatsApp.';
+          manual.hidden = android;
+          open.onclick = function () {
+            if (!opened) { opened = true; say('Waiting for your WhatsApp message…'); poll(2500); }
+          };
+        }).catch(function (err) {
+          if (err.code === 'WA_OFF') { store.del('st_cfg'); cfgPromise = null; cfg.wa = false; return start(); }
+          restart(err.message);
+        });
+        function poll(ms) {
+          waStop();
+          waVisible = function () { if (document.visibilityState === 'visible') poll(50); };
+          document.addEventListener('visibilitychange', waVisible);
+          waTimer = setTimeout(function () {
+            if (!document.body.contains(open)) return waStop();
+            if (Date.now() > ends) return restart('This code has expired. Please start again.');
+            api('waCheck', { code: started.code, key: started.key }).then(function (c) {
+              if (!document.body.contains(open)) return;
+              if (!c.ready) return poll(2500);
+              waStop(); say('Got it. One moment…');
+              return api('waLogin', { code: started.code, key: started.key }).then(function (x) {
+                if (mode === 'phone') return onProof(x.proof, x.phone);
+                if (x.needName) return waNameStep(x);
+                finish(x, false);
+              });
+            }).catch(function (err) {
+              if (err.code === 'WA_EXPIRED' || err.code === 'WA_NUMBER') return restart(err.message);
+              poll(4000);                    // a network hiccup: keep trying
+            });
+          }, ms);
+        }
+      }
+      function waNameStep(x) {
+        title('Create your account');
+        body.innerHTML = '<form class="stack" data-step="wa-name" novalidate><p class="verified-note">' + icon('shield') + esc(fmtPhone(x.phone)) + ' verified</p>' +
+          '<label class="field"><span>Full name</span><input name="name" autocomplete="name" required></label>' +
+          '<label class="field"><span>Email <em>(optional)</em></span><input name="email" type="email" autocomplete="email"></label>' +
+          '<div class="form-actions"><button class="btn btn-gold btn-block" type="submit">Create account</button></div>' + terms + '</form>';
+        var form = $('form', body);
+        form.name.value = x.name || '';
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var d = formData(form), btn = $('button[type=submit]', form);
+          if ((d.name || '').trim().length < 2) { form.name.focus(); return fieldError(form, 'Enter your full name.'); }
+          fieldError(form, ''); busy(btn, true, 'Creating account…');
+          api('waLogin', { proof: x.proof, name: d.name, email: d.email }).then(function (r) { finish(r, !!r.created); })
+            .catch(function (err) { busy(btn, false); fieldError(form, err.message); if (err.code === 'WA_EXPIRED') setTimeout(start, 1600); });
+        });
+        focusSoon(function () { return form.name.value ? form.email : form.name; }, body, 40);
       }
       function socialMsg(t) { var el = $('.social-msg', body); if (el) { el.textContent = t || ''; el.hidden = !t; } }
       function wireSocial() {
@@ -447,6 +554,7 @@
       }
       // New Google / Facebook sign-in: we still need the mobile number (proved by OTP when OTP is on).
       function socialPhoneStep(x, prefill) {
+        if (cfg.wa) return socialWaStep(x, prefill);
         var useOtp = !!cfg.otp;
         title('One more step');
         body.innerHTML = '<form class="stack" data-step="social" novalidate>' +
@@ -478,6 +586,27 @@
         });
         focusSoon(function () { return form.name.value ? form.phone : form.name; }, body, 40);
       }
+      // Google / Facebook + WhatsApp: the client's name, then WhatsApp proves their mobile number.
+      function socialWaStep(x, prefill) {
+        title('One more step');
+        body.innerHTML = '<form class="stack" data-step="social" novalidate>' +
+          '<p class="verified-note">' + icon('check') + (x.provider === 'facebook' ? 'Signed in with Facebook' : 'Signed in with Google') + '</p>' +
+          '<p class="small muted" style="margin:0">Add your mobile number with WhatsApp, so our team can reply about properties. We never share it without your OK.</p>' +
+          '<label class="field"><span>Full name</span><input name="name" autocomplete="name" required></label>' +
+          '<div class="form-actions"><button class="btn btn-wa btn-block" type="submit" data-wa-phone>' + icon('wa') + 'Add my number with WhatsApp</button></div>' + terms + '</form>';
+        var form = $('form', body);
+        form.name.value = (prefill && prefill.name) || x.name || '';
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var name = (form.name.value || '').trim();
+          if (name.length < 2) { form.name.focus(); return fieldError(form, 'Enter your full name.'); }
+          waStep('phone', function (phoneProof) {
+            return api('socialLogin', { proof: x.proof, phoneProof: phoneProof, name: name }).then(function (r) { finish(r, !!r.created); })
+              .catch(function (err) { socialWaStep(x, { name: name }); fieldError($('form', body), err.message); if (err.code === 'SOCIAL_EXPIRED') setTimeout(start, 1600); });
+          });
+        });
+        focusSoon(function () { return form.name.value ? $('button[type=submit]', form) : form.name; }, body, 40);
+      }
       function socialError(form, err, x, phone) {
         fieldError(form, err.message);
         if (err.code === 'EXISTS') {
@@ -498,9 +627,9 @@
           onResend: function () { return api('sendOtp', { phone: phone, purpose: 'login' }); },
           onChange: function () { socialPhoneStep(x, { name: name, phone: phone }); } }));
       }
-      function start() { if (cfg.otp) phoneStep(''); else passwordTabs(); }
+      function start() { if (hasMethods()) methodsStep(); else if (cfg.otp) phoneStep(''); else passwordTabs(); }
       function finish(r, created) {
-        done = true;
+        done = true; waStop();
         Auth.set(r.token, r.user);
         toast((created ? 'Account created. Welcome, ' : 'Welcome back, ') + r.user.name.split(' ')[0] + '.', 'ok');
         m.close();
@@ -509,13 +638,13 @@
 
       function phoneStep(prefill) {
         title('Log in or sign up');
-        body.innerHTML = reasonHtml + socialHtml() + '<form class="stack" data-step="phone" novalidate>' +
+        body.innerHTML = reasonHtml + '<form class="stack" data-step="phone" novalidate>' +
           '<label class="field"><span>Mobile number</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" required></label>' +
           '<div class="form-actions"><button class="btn btn-gold btn-block" type="submit">Get OTP</button></div>' +
           '<p class="small muted center" style="margin:0">New here? The same OTP creates your free account.</p>' +
-          '<p class="center" style="margin:0"><button type="button" class="btn-link" data-pw>Log in with password instead</button></p>' + terms + '</form>';
+          '<p class="center" style="margin:0"><button type="button" class="btn-link" data-pw>Log in with password instead</button></p>' + backHtml() + terms + '</form>';
         var form = $('form', body);
-        wireSocial();
+        wireBack();
         if (prefill) form.phone.value = prefill;
         $('[data-pw]', body).onclick = function () { passwordStep(normPhone(form.phone.value) || ''); };
         form.addEventListener('submit', function (e) {
@@ -585,7 +714,7 @@
 
       // OTP switched off: classic tabs
       function passwordTabs() {
-        body.innerHTML = reasonHtml + socialHtml() +
+        body.innerHTML = reasonHtml + backHtml() +
           '<div class="seg-tabs" role="tablist"><button type="button" role="tab" data-tab="login" aria-selected="true">Log in</button><button type="button" role="tab" data-tab="register" aria-selected="false">Create account</button></div>' +
           '<form class="stack" data-form="login" novalidate>' +
           '<label class="field"><span>Mobile number</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" required></label>' +
@@ -605,7 +734,7 @@
           var f1 = $('[data-form="' + name + '"] input', body); if (f1) f1.focus();
         }
         $$('[data-tab]', body).forEach(function (b) { b.onclick = function () { tab(b.dataset.tab); }; });
-        wireSocial();
+        wireBack();
         tab(startTab === 'register' ? 'register' : 'login');
         $$('form', body).forEach(function (form) {
           form.addEventListener('submit', function (e) {
@@ -631,6 +760,7 @@
         cfg = c || {};
         start();
       });
+      if (opts.container) opts.container.addEventListener('login:restart', function () { waStop(); start(); });
     });
   }
 
@@ -642,6 +772,7 @@
     fb: '<path d="M22 12a10 10 0 1 0-11.6 9.9v-7H7.9V12h2.5V9.8c0-2.5 1.5-3.9 3.8-3.9 1.1 0 2.2.2 2.2.2v2.5h-1.3c-1.2 0-1.6.8-1.6 1.6V12h2.8l-.4 2.9h-2.3v7A10 10 0 0 0 22 12z"/>',
     wa: '<path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3zm0 16.4c-1.4 0-2.8-.4-4-1.1l-.3-.2-2.7.7.7-2.6-.2-.3A7.4 7.4 0 1 1 12 19.4zm4.1-5.5c-.2-.1-1.3-.7-1.5-.7-.2-.1-.4-.1-.5.1l-.7.9c-.1.2-.3.2-.5.1a6 6 0 0 1-3-2.6c-.2-.4.2-.4.7-1.3.1-.2 0-.3 0-.4l-.7-1.6c-.2-.4-.4-.4-.5-.4h-.4c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2.9 2.3c.1.2 1.6 2.5 4 3.5 1.5.6 2 .7 2.8.6.4-.1 1.3-.5 1.5-1.1.2-.5.2-1 .1-1.1l-.4-.3z"/>',
     chat: '<path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-4.3 3.4A.5.5 0 0 1 4 20V5a1 1 0 0 1 0-1zm2 2v10.9L8.3 15H19V6H6z"/>',
+    home: '<path d="M12 3.2l9 7.6-1.3 1.5-1.2-1V20a1 1 0 0 1-1 1h-4.5v-6h-2v6H6.5a1 1 0 0 1-1-1v-8.7l-1.2 1L3 10.8l9-7.6zm0 2.6l-4.5 3.8V19h2.5v-6h4v6h2.5V9.6L12 5.8z"/>',
     user: '<path d="M12 12a4.5 4.5 0 1 0 0-9 4.5 4.5 0 0 0 0 9zm0-2a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zm-8 11c0-3.9 3.6-7 8-7s8 3.1 8 7h-2c0-2.7-2.6-5-6-5s-6 2.3-6 5H4z"/>',
     pin: '<path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/>',
     locate: '<path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8zm9 3h-2.1A7 7 0 0 0 13 5.1V3h-2v2.1A7 7 0 0 0 5.1 11H3v2h2.1a7 7 0 0 0 5.9 5.9V21h2v-2.1a7 7 0 0 0 5.9-5.9H21v-2zm-9 6a5 5 0 1 1 0-10 5 5 0 0 1 0 10z"/>',

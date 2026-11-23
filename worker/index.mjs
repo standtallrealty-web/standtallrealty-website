@@ -6,6 +6,8 @@
                               data and text already in the HTML, so Google can read it without running JavaScript.
    - /property-in-*        -> the area page with links to that area's live listings.
    - /sitemap.xml          -> static pages, area pages and every live listing.
+   - /wa-hook                    -> WhatsApp login: Meta tells us a client sent their login code. Answered at once;
+                                  the message goes on to the Apps Script API, which checks Meta's signature itself.
    - /.well-known/assetlinks.json -> tells Chrome that the Android app (android/) belongs to this website,
                               so the app can show the site full screen and website links open in the app.
    Listing data comes from the Google Apps Script API (the same one the website uses) and is cached for 15 minutes.
@@ -21,6 +23,9 @@ const ANDROID_PACKAGE = 'com.standtallrealty.app';
 const ANDROID_APP_FINGERPRINTS = [
   'C7:05:49:4B:75:40:E8:23:8E:9D:0B:37:C1:69:DA:CC:08:50:D0:62:20:6A:58:1B:86:F4:B4:5C:96:33:3E:73'
 ];
+// WhatsApp webhook check word, typed in Meta's webhook settings. Not a secret: every message is also
+// signed by Meta with the app secret, and Code.gs checks that signature.
+const WA_VERIFY_TOKEN = 'standtall-whatsapp-login';
 const SSR_MARK = '<!--area-ssr--><div class="skeleton" style="min-height:280px;grid-column:1/-1"></div>';
 
 export default {
@@ -28,6 +33,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
     if (path === '/.well-known/assetlinks.json') return assetLinks();
+    if (path === '/wa-hook') return waHook(request, env, ctx, url);
     try {
       if (path.endsWith('.html')) return cleanUrl(request, env, url);
       if (path === '/property') return await propertyPage(request, env, ctx, url);
@@ -39,6 +45,31 @@ export default {
     return env.ASSETS.fetch(request);
   }
 };
+
+// ------------------------------------------------------------------ WhatsApp login webhook
+async function waHook(request, env, ctx, url) {
+  if (request.method === 'GET') {          // Meta checks the address once, when it is saved
+    const q = url.searchParams;
+    if (q.get('hub.mode') === 'subscribe' && q.get('hub.verify_token') === WA_VERIFY_TOKEN) {
+      return new Response(q.get('hub.challenge') || '', { headers: { 'content-type': 'text/plain' } });
+    }
+    return new Response('Forbidden', { status: 403 });
+  }
+  if (request.method !== 'POST') return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, POST' } });
+  const sig = request.headers.get('x-hub-signature-256') || '';
+  if (!/^sha256=[0-9a-f]{64}$/i.test(sig)) return new Response('Bad signature', { status: 401 });
+  const body = await request.text();
+  if (body.length > 256 * 1024) return new Response('Too large', { status: 413 });
+  const endpoint = await apiUrl(env, url);
+  if (endpoint) {
+    // Meta wants a quick 200; the backend works in the background.
+    ctx.waitUntil(fetch(endpoint, {
+      method: 'POST', redirect: 'follow', headers: { 'content-type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'waHook', body: body, sig: sig, noCount: true })
+    }).catch(() => {}));
+  }
+  return new Response('OK', { headers: { 'content-type': 'text/plain' } });
+}
 
 // ------------------------------------------------------------------ Android app link check
 function assetLinks() {

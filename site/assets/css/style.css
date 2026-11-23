@@ -989,3 +989,129 @@ a.pill-ver:hover { text-decoration: underline; }
 /* ---------- Android app ---------- */
 .in-app .app-get { display: none !important; }
 
+
+/* ======================================================================
+   Simple home (OLX-style): short search, category icons, listings first
+   ====================================================================== */
+.home-hero { background: radial-gradient(120% 140% at 85% 0%, var(--navy-2) 0%, var(--navy) 55%, var(--night) 100%); color: #fff; padding: 34px 0 30px; }
+.home-hero h1 { color: #F5F8FC; font-size: clamp(30px, 4.6vw, 46px); margin: 0 0 6px; }
+.home-sub { color: var(--glass-2); margin: 0 0 18px; font-size: 16.5px; }
+.home-search { max-width: 760px; }
+.home-search .search-tabs { display: flex; gap: 6px; margin: 0 0 10px; border: 0; }
+.home-search .search-tabs button { border: 1px solid rgba(255, 255, 255, .28); background: transparent; color: #E6EDF7; font-weight: 600; font-size: 14.5px; padding: 7px 16px; border-radius: 999px; cursor: pointer; margin: 0; }
+.home-search .search-tabs button[aria-selected=true] { background: var(--gold); border-color: var(--gold); color: var(--navy); }
+.search-box { display: flex; align-items: center; gap: 0; background: #fff; border-radius: 12px; padding: 5px; box-shadow: 0 10px 30px rgba(6, 13, 26, .25); }
+.search-box input { flex: 1; min-width: 0; border: 0; outline: 0; font-size: 16.5px; padding: 11px 12px; background: transparent; color: var(--ink); }
+.search-box input::-webkit-search-cancel-button { display: none; }
+.search-box .btn { min-height: 46px; padding: 0 20px; border-radius: 9px; }
+.near-me { color: var(--glass-2) !important; margin-top: 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 14.5px; }
+.near-me .ic { width: 18px; height: 18px; }
+
+.cats { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin: -2px 0 0; padding: 18px 0 6px; }
+.cats a { display: flex; flex-direction: column; align-items: center; gap: 7px; text-decoration: none; color: var(--ink); font-size: 14px; font-weight: 600; text-align: center; padding: 10px 4px; border-radius: 12px; }
+.cats a:hover { background: #fff; }
+.cat-ic { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; background: #fff; border: 1px solid var(--line); color: var(--navy); box-shadow: var(--sh); }
+.cat-ic .ic { width: 26px; height: 26px; }
+.cat-post .cat-ic { background: var(--gold); border-color: var(--gold); }
+.cat-t { line-height: 1.25; }
+
+.home-sec { padding: 22px 0; }
+.home-sec h2 { font-size: clamp(22px, 2.6vw, 28px); margin: 0; }
+.sec-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 14px; flex-wrap: wrap; }
+.sec-row .chips .chip span { padding: 6px 13px; font-size: 13.5px; }
+.hscroll { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(280px, 31%); gap: 16px; overflow-x: auto; scroll-snap-type: x mandatory; padding: 2px 2px 10px; scrollbar-width: thin; }
+.hscroll > * { scroll-snap-align: start; }
+.hscroll .skeleton { min-height: 300px; }
+.cards.grid2 { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.more-row { margin-top: 18px; text-align: center; }
+
+.post-card { display: flex; align-items: center; justify-content: space-between; gap: 18px; flex-wrap: wrap; background: var(--navy); color: #E6EDF7; border-radius: var(--r-lg); padding: 22px 24px; }
+.post-card h2 { color: #fff; margin-bottom: 4px; }
+.post-card p { margin: 0; color: var(--glass-2); }
+.post-actions { display: flex; gap: 10px; flex-wrap: wrap; }
+
+.area-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip-link { display: inline-block; padding: 8px 14px; border: 1px solid var(--line-2); border-radius: 999px; background: #fff; font-size: 14px; font-weight: 500; color: var(--ink-2); text-decoration: none; }
+.chip-link:hover { border-color: var(--navy); color: var(--navy); }
+
+.why { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.why li { display: flex; gap: 12px; align-items: flex-start; background: #fff; border: 1px solid var(--line); border-radius: var(--r); padding: 14px; }
+.why-ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center; background: #EEF2F8; color: var(--navy); flex: none; }
+.why b { display: block; font-size: 15px; }
+.why small { display: block; color: var(--muted); font-size: 13.5px; line-height: 1.4; margin-top: 2px; }
+.help-strip { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding: 14px 16px; border: 1px dashed var(--line-2); border-radius: var(--r); background: #fff; }
+.help-strip p { margin: 0; color: var(--ink-2); }
+.home .faq summary { font-size: 16.5px; padding: 13px 34px 13px 0; }
+
+@media (max-width: 900px) {
+  .home-hero { padding: 22px 0 22px; }
+  .home-sub { font-size: 15px; margin-bottom: 14px; }
+  .search-box .sb-t { display: none; }
+  .search-box .btn { padding: 0 14px; }
+  .cats { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding-top: 14px; }
+  .cat-ic { width: 52px; height: 52px; }
+  .hscroll { grid-auto-columns: 78%; }
+  .cards.grid2 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  /* compact cards in the 2-column grid, like OLX */
+  .grid2 .pcard { border-radius: 10px; }
+  .grid2 .pc-media { aspect-ratio: 4 / 3; }
+  .grid2 .pc-seg { left: 6px; top: 6px; font-size: 11px; padding: 3px 7px; }
+  .grid2 .pc-tag, .grid2 .pc-count, .grid2 .pc-specs, .grid2 .pc-foot, .grid2 .pc-rera { display: none; }
+  .grid2 .pc-save { width: 32px; height: 32px; right: 6px; top: 6px; }
+  .grid2 .pc-save .ic { width: 18px; height: 18px; }
+  .grid2 .pc-body { padding: 9px 10px 11px; gap: 3px; }
+  .grid2 .pc-price { font-size: 17px; }
+  .grid2 .pc-price small { font-size: 12px; }
+  .grid2 .pc-title { font-size: 13.5px; font-weight: 500; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .grid2 .pc-loc { font-size: 12.5px; }
+  .grid2 .pc-loc .ic { width: 14px; height: 14px; }
+  .grid2 .skeleton { min-height: 230px; }
+  .why { grid-template-columns: 1fr; }
+  .post-card { padding: 18px; }
+  .post-actions .btn { flex: 1 1 auto; }
+  .home-sec { padding: 16px 0; }
+}
+
+/* ---------- bottom bar: Home, Search, Post, Chats, WhatsApp ---------- */
+@media (max-width: 900px) {
+  .mobile-bar.tabs5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .mobile-bar.tabs5 a[aria-current=page] { color: var(--navy); }
+  .mobile-bar.tabs5 a[aria-current=page]::before { content: ''; position: absolute; top: 0; left: 28%; right: 28%; height: 3px; border-radius: 0 0 3px 3px; background: var(--gold); }
+  .mobile-bar.tabs5 .post .ic { width: 44px; height: 44px; padding: 9px; margin-top: -22px; border: 4px solid #fff; box-shadow: 0 4px 12px rgba(11, 21, 38, .18); }
+  .hdr-chats { display: none !important; }
+}
+@media (min-width: 901px) { .hdr-call { display: none !important; } }
+
+/* ---------- log in: WhatsApp first ---------- */
+.btn-wa .ic, .btn-fb .ic { width: 22px; height: 22px; }
+.login-methods, .social-login { display: grid; gap: 10px; }
+.social-login .btn { min-height: 48px; font-size: 16px; }
+.wa-how { margin: 0; padding-left: 20px; display: grid; gap: 6px; color: var(--ink-2); }
+.wa-status { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--ok-bg); color: var(--ok); font-weight: 600; }
+.wa-status.bad { background: var(--bad-bg); color: var(--bad); }
+.wa-manual { margin: 0; }
+
+.login-page { background: var(--navy); }
+.login-page .site-header { display: none; }
+.login-page .wa-float { display: none !important; }
+.login-main { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; align-items: center; padding: 28px 16px calc(28px + env(safe-area-inset-bottom)); background: radial-gradient(120% 70% at 50% 0%, var(--navy-2) 0%, var(--navy) 55%, var(--night) 100%); }
+.login-brand { text-align: center; color: #fff; margin: 10px 0 22px; }
+.login-brand img { margin: 0 auto 10px; width: 76px; height: auto; }
+.login-name { font: 600 26px/1 var(--serif); letter-spacing: .08em; margin: 0; color: #F5F8FC; }
+.login-sub { font-size: 12px; font-weight: 700; letter-spacing: .5em; color: var(--gold); margin: 6px 0 0; padding-left: .5em; }
+.login-slogan { font: italic 15px/1.3 var(--serif); color: var(--cream); margin: 10px 0 0; }
+.login-card { width: 100%; max-width: 420px; background: #fff; border-radius: 18px; padding: 22px 20px 16px; box-shadow: var(--sh-lg); }
+.login-title { font-size: 22px; margin: 0 0 14px; text-align: center; }
+.login-body .stack { gap: 12px; }
+.login-skip { margin: 16px 0 0; }
+.login-skip a { color: var(--glass-2); font-size: 14px; }
+.in-app .login-skip { display: none; }
+@media (max-width: 900px) {
+  /* The home page already lists popular areas; keep the phone footer shorter. */
+  .foot-areas { display: none; }
+}
+@media (max-width: 900px) {
+  .home .reviews { grid-auto-flow: column; grid-template-columns: none; grid-auto-columns: 84%; overflow-x: auto; scroll-snap-type: x mandatory; gap: 12px; }
+  .home .review { scroll-snap-align: start; padding: 16px; }
+}
+

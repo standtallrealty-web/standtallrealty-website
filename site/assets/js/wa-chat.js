@@ -621,7 +621,7 @@
     if (remember) try { localStorage.setItem(TEASED, String(Date.now())); } catch (e) {}
   }
   function showTease() {
-    if (tease || st.log.length || (root && !root.hidden) || document.body.classList.contains('modal-open') || PAGE === 'account') return;
+    if (tease || st.log.length || (root && !root.hidden) || document.body.classList.contains('modal-open') || QUIET) return;
     try { if (Date.now() - (Number(localStorage.getItem(TEASED)) || 0) < 3 * 864e5) return; } catch (e) { return; }
     var msg = PAGE === 'post' ? 'Prefer a quick chat? Tell us about your property in a few taps, no login needed.' :
       ST.currentListing ? 'Questions about this property? Ask us here, it takes a few taps.' :
@@ -659,16 +659,17 @@
     if (t.classList.contains('wa-float') && root && !root.hidden) { close(); return; }
     open(t.getAttribute('data-quickchat') || '');
   });
-  /** The chat opens by itself a moment after the first page is shown, once per visit: leads are the point.
-      It stays quiet for the rest of the visit once opened or closed, and after the visitor has sent an enquiry. */
+  /** On the website the chat opens by itself a moment after the first page is shown, once per visit: leads are the point.
+      It stays quiet for the rest of the visit once opened or closed, and after the visitor has sent an enquiry.
+      Never in the Android app (people there have already logged in and want a clean screen), on the login
+      screen or on the account page. The chat button stays, so it opens whenever someone taps it. */
+  var QUIET = !!ST.IN_APP || PAGE === 'account' || PAGE === 'login';
   function autoOpen() {
     if (root && !root.hidden) return;
-    if (st.step === 'done' || PAGE === 'account' || document.body.classList.contains('modal-open')) return;
+    if (st.step === 'done' || QUIET || document.body.classList.contains('modal-open')) return;
     var a = document.activeElement;
     if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) return;   // do not interrupt someone who is typing
     try { if (sessionStorage.getItem(AUTO)) return; } catch (e) { return; }
-    // In the Android app, only on the first launch: people who installed the app come back often.
-    if (ST.IN_APP) try { if (localStorage.getItem('st_app_chat')) return; localStorage.setItem('st_app_chat', '1'); } catch (e) { return; }
     open(PAGE === 'post' ? 'list' : '', true);
   }
   setTimeout(autoOpen, 3000);
