@@ -1,0 +1,4 @@
+    topResumedActivity=ActivityRecord{3f78496 u0 com.android.chrome/org.chromium.chrome.browser.customtabs.TranslucentCustomTabActivity t8}
+  ResumedActivity: ActivityRecord{3f78496 u0 com.android.chrome/org.chromium.chrome.browser.customtabs.TranslucentCustomTabActivity t8}
+    topResumedActivity=ActivityRecord{853e470 u0 com.android.chrome/org.chromium.chrome.browser.customtabs.TranslucentCustomTabActivity t9}
+  ResumedActivity: ActivityRecord{853e470 u0 com.android.chrome/org.chromium.chrome.browser.customtabs.TranslucentCustomTabActivity t9}
