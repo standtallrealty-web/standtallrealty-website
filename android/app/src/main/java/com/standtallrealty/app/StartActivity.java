@@ -1,5 +1,7 @@
 package com.standtallrealty.app;
 
+import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -16,6 +18,10 @@ import com.google.androidbrowserhelper.trusted.LauncherActivity;
  * Opens the app: shows the Stand Tall Realty logo for about a second, then the website full screen.
  * The logo shows on every phone, whichever browser it uses. Links (for example from WhatsApp)
  * and shortcuts skip the wait and open straight away.
+ *
+ * The website is told this app's version and where it was installed from (app_v, app_src), so it
+ * can offer "Update the app" when a newer version is on the website. Apps installed from Google
+ * Play are updated by Play, and the website shows them no update message.
  */
 public class StartActivity extends LauncherActivity {
     private static final long LOGO_MILLIS = 1000;
@@ -42,6 +48,33 @@ public class StartActivity extends LauncherActivity {
         setContentView(screen);
         lightIconsOnNavy();
         handler.postDelayed(openWebsite, LOGO_MILLIS);
+    }
+
+    @Override
+    protected Uri getLaunchingUrl() {
+        Uri url = super.getLaunchingUrl();
+        String host = url.getHost();
+        if (!"https".equalsIgnoreCase(url.getScheme()) || host == null
+                || !(host.equalsIgnoreCase("www.standtallrealty.com") || host.equalsIgnoreCase("standtallrealty.com"))) {
+            return url;
+        }
+        return url.buildUpon()
+                .appendQueryParameter("app_v", String.valueOf(BuildConfig.VERSION_CODE))
+                .appendQueryParameter("app_src", installedFromPlay() ? "play" : "web")
+                .build();
+    }
+
+    @SuppressWarnings("deprecation")
+    private boolean installedFromPlay() {
+        try {
+            PackageManager pm = getPackageManager();
+            String installer = Build.VERSION.SDK_INT >= 30
+                    ? pm.getInstallSourceInfo(getPackageName()).getInstallingPackageName()
+                    : pm.getInstallerPackageName(getPackageName());
+            return "com.android.vending".equals(installer);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     @Override

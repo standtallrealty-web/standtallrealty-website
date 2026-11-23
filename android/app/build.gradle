@@ -11,8 +11,12 @@ android {
         minSdk 24
         targetSdk 36
         // Raise both for every new upload to Google Play.
-        versionCode 2
-        versionName '1.1.0'
+        versionCode 3
+        versionName '1.2.0'
+    }
+
+    buildFeatures {
+        buildConfig true        // BuildConfig.VERSION_CODE tells the website which version is installed
     }
 
     buildTypes {

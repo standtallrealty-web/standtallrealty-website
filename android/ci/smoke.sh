@@ -30,7 +30,23 @@ adb shell am start -W -a android.intent.action.VIEW -c android.intent.category.B
 sleep 25
 adb exec-out screencap -p > "$OUT/2-link.png"
 adb shell dumpsys activity activities | grep -E "ResumedActivity" >> "$OUT/top-activity.txt" || true
+# Updating from 1.1.0 (the version before update messages): the website should offer the update,
+# and after installing this version over it, the message should be gone.
+OLD_APK="https://raw.githubusercontent.com/standtallrealty-web/standtallrealty-website/bd9404c057916024b3ed2b5cd187daf388e5c9ee/android/release/stand-tall-realty.apk"
+if curl -fsSL -o old.apk "$OLD_APK"; then
+  adb uninstall $PKG > /dev/null 2>&1 || true
+  adb install old.apk > "$OUT/update.txt" 2>&1; echo "install 1.1.0 exit=$?" >> "$OUT/update.txt"
+  adb shell dumpsys package $PKG | grep -E "versionName|versionCode" >> "$OUT/update.txt" || true
+  adb shell am start -W -n $PKG/.StartActivity >> "$OUT/update.txt" 2>&1
+  sleep 40
+  adb exec-out screencap -p > "$OUT/3-old-app.png"
+  adb install -r android/release/stand-tall-realty.apk >> "$OUT/update.txt" 2>&1; echo "update exit=$?" >> "$OUT/update.txt"
+  adb shell dumpsys package $PKG | grep -E "versionName|versionCode" >> "$OUT/update.txt" || true
+  adb shell am start -W -n $PKG/.StartActivity >> "$OUT/update.txt" 2>&1
+  sleep 40
+  adb exec-out screencap -p > "$OUT/4-after-update.png"
+fi
 adb logcat -d > "$OUT/logcat-full.txt"
-grep -iE "TWA|TrustedWeb|LauncherActivity|browserhelper|OriginVerifier|DigitalAsset|asset ?link|AndroidRuntime|FATAL|standtall" "$OUT/logcat-full.txt" | head -500 > "$OUT/logcat.txt" || true
+grep -iE "TWA|TrustedWeb|LauncherActivity|Using url|browserhelper|OriginVerifier|DigitalAsset|asset ?link|AndroidRuntime|FATAL|standtall" "$OUT/logcat-full.txt" | head -500 > "$OUT/logcat.txt" || true
 gzip -f "$OUT/logcat-full.txt"
 exit 0
