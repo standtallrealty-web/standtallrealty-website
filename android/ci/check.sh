@@ -36,6 +36,11 @@ fi
   echo "== /app/stand-tall-realty.apk"; curl -sSI https://www.standtallrealty.com/app/stand-tall-realty.apk | grep -iE "^HTTP|content-type|content-length|content-disposition|cache-control"
   curl -sS -o live.apk https://www.standtallrealty.com/app/stand-tall-realty.apk && sha256sum live.apk
   echo "== /.well-known/assetlinks.json"; curl -sS -D - https://www.standtallrealty.com/.well-known/assetlinks.json | grep -ivE "^(date|cf-|report-to|nel|server|alt-svc|vary)"
+  # WhatsApp login: Meta's address check must echo the challenge; a wrong token and an unsigned POST are refused.
+  echo "== /wa-hook (Meta check, right token)"; curl -sS -w "  [%{http_code}]\n" "https://www.standtallrealty.com/wa-hook?hub.mode=subscribe&hub.verify_token=standtall-whatsapp-login&hub.challenge=4242"
+  echo "== /wa-hook (wrong token)"; curl -sS -o /dev/null -w "%{http_code}\n" "https://www.standtallrealty.com/wa-hook?hub.mode=subscribe&hub.verify_token=wrong&hub.challenge=4242"
+  echo "== /wa-hook (POST without signature)"; curl -sS -o /dev/null -w "%{http_code}\n" -X POST -d '{}' https://www.standtallrealty.com/wa-hook
+  echo "== /login"; curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://www.standtallrealty.com/login
 } > out/live-site.txt 2>&1
 echo "signed=$signed" >> "$GITHUB_OUTPUT"
 ls -la out
