@@ -1,0 +1,53 @@
+== /app
+200 text/html
+== /app/stand-tall-realty.apk
+HTTP/2 200 
+content-type: application/vnd.android.package-archive
+cache-control: no-cache
+content-disposition: attachment; filename="stand-tall-realty.apk"
+x-content-type-options: nosniff
+699392c04fb62a642ebe0a0211a04699f3638c0110d451ca8a6600a3dcebd070  live.apk
+== /.well-known/assetlinks.json
+HTTP/2 200 
+content-type: application/json
+content-length: 342
+access-control-allow-origin: *
+cache-control: public, max-age=3600
+
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.standtallrealty.app",
+      "sha256_cert_fingerprints": [
+        "C7:05:49:4B:75:40:E8:23:8E:9D:0B:37:C1:69:DA:CC:08:50:D0:62:20:6A:58:1B:86:F4:B4:5C:96:33:3E:73"
+      ]
+    }
+  }
+]
+== /wa-hook (Meta check, right token)
+4242  [200]
+== /wa-hook (wrong token)
+403
+== /wa-hook (POST without signature)
+401
+== /login
+200 text/html
+== /api/config (first)
+{"ok":true,"data":{"otp":false,"otpEnquiry":false}}
+  [200, 1.524898s]
+  (fresh copy)
+== /api/config (again)
+  [200, 0.058020s]
+  (fresh copy)
+== /app/version.json
+{
+ "versionCode": 3,
+ "versionName": "1.2.0",
+ "size": 1196840,
+ "sha256": "699392c04fb62a642ebe0a0211a04699f3638c0110d451ca8a6600a3dcebd070",
+ "url": "/app/stand-tall-realty.apk"
+}

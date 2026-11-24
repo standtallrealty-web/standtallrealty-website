@@ -1,0 +1,18 @@
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=Stand Tall Realty, O=Stand Tall Realty, L=Pune, ST=Maharashtra, C=IN
+Signer #1 certificate SHA-256 digest: c705494b7540e8238e9d0b37c169dacc0850d062206a581b86f4b45c96333e73
+Signer #1 certificate SHA-1 digest: 00bf2437d7f7c6d0cf6fc18eb32dc9156b99e710
+Signer #1 certificate MD5 digest: 592feecfbff503683211e55f65e9336b
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 4096
+Signer #1 public key SHA-256 digest: deed4a69706f48d00273a29fe183c0c4cad5d248e7e7c2f884eac21542600e98
+Signer #1 public key SHA-1 digest: 741615db74ad5643af4b2e76084f4d46de31a99b
+Signer #1 public key MD5 digest: 65bf5fccc25d2d664526f07ccb4bb7a4
+exit=0
