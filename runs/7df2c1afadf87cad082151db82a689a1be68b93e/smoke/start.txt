@@ -1,0 +1,7 @@
+Starting: Intent { cmp=com.standtallrealty.app/.StartActivity }
+Status: ok
+LaunchState: COLD
+Activity: com.standtallrealty.app/.StartActivity
+TotalTime: 1733
+WaitTime: 1738
+Complete
