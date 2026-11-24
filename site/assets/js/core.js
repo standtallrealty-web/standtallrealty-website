@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611241330';
+  var VER = '202611241338';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -1283,6 +1283,15 @@
         '<div class="row-end">' + link('btn btn-ghost', 'Download again') + '<button type="button" class="btn btn-navy" data-upd-close>Close</button></div></div>';
       $('[data-upd-close]', m.el).onclick = function () { m.close(); };
       track('AppUpdate', { version: j.versionName || '' });
+      // They leave for the installer and come back: Android keeps this page from before the update open,
+      // so close the box. The next time the app opens, it reports its new version and nothing shows.
+      var away = 0;
+      function onVis() {
+        if (!m.el.isConnected) return document.removeEventListener('visibilitychange', onVis);
+        if (document.visibilityState === 'hidden') { away = Date.now(); return; }
+        if (away && Date.now() - away > 1500) { document.removeEventListener('visibilitychange', onVis); m.close(); }
+      }
+      document.addEventListener('visibilitychange', onVis);
     }
     $('[data-upd-get]', m.el).addEventListener('click', function () { setTimeout(steps, 60); });   // let the download start first
   }

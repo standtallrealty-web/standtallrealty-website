@@ -42,9 +42,12 @@ if curl -fsSL -o old.apk "$OLD_APK"; then
   adb exec-out screencap -p > "$OUT/3-old-app.png"
   adb install -r android/release/stand-tall-realty.apk >> "$OUT/update.txt" 2>&1; echo "update exit=$?" >> "$OUT/update.txt"
   adb shell dumpsys package $PKG | grep -E "versionName|versionCode" >> "$OUT/update.txt" || true
-  adb shell am start -W -n $PKG/.StartActivity >> "$OUT/update.txt" 2>&1
+  # Android keeps the old page open after an update (the website closes its box when the person comes
+  # back from the installer). The next time the app really opens, it starts fresh: NEW_TASK + CLEAR_TASK.
+  adb shell am start -W -f 0x10008000 -n $PKG/.StartActivity >> "$OUT/update.txt" 2>&1
   sleep 40
   adb exec-out screencap -p > "$OUT/4-after-update.png"
+  adb logcat -d | grep -E "Using url" | tail -3 >> "$OUT/update.txt" || true
 fi
 adb logcat -d > "$OUT/logcat-full.txt"
 grep -iE "TWA|TrustedWeb|LauncherActivity|Using url|browserhelper|OriginVerifier|DigitalAsset|asset ?link|AndroidRuntime|FATAL|standtall" "$OUT/logcat-full.txt" | head -500 > "$OUT/logcat.txt" || true
