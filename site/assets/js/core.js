@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611241325';
+  var VER = '202611241330';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -889,14 +889,21 @@
 
   // ---------------------------------------------------------------- listings cache (public)
   var listingsPromise = null;
+  /** Live listings. A copy under a minute old is used as is. Up to 30 minutes old it is shown at once (the app
+      opens without waiting for the Google Sheet) and refreshed quietly for the next page. Older: wait for fresh.
+      Any change to listings (posting, approving, editing) clears the copy, so changes show at once. */
   function getListings(force) {
     if (!force && listingsPromise) return listingsPromise;
-    var cached = !force && store.json('st_pub', null);
-    if (cached && Date.now() - cached.at < 60000 && !DEMO) { listingsPromise = Promise.resolve(cached.listings); return listingsPromise; }
-    listingsPromise = api('listings').then(function (r) {
-      try { if (!DEMO) store.setJson('st_pub', { at: Date.now(), listings: r.listings }); } catch (e) {}
-      return r.listings;
-    }).catch(function (e) { listingsPromise = null; throw e; });
+    var cached = !force && !DEMO && store.json('st_pub', null), age = cached ? Date.now() - cached.at : Infinity;
+    function fresh() {
+      return api('listings').then(function (r) {
+        try { if (!DEMO) store.setJson('st_pub', { at: Date.now(), listings: r.listings }); } catch (e) {}
+        return r.listings;
+      });
+    }
+    if (cached && cached.listings && age < 60000) return (listingsPromise = Promise.resolve(cached.listings));
+    if (cached && cached.listings && age < 1800000) { fresh().catch(function () {}); return (listingsPromise = Promise.resolve(cached.listings)); }
+    listingsPromise = fresh().catch(function (e) { listingsPromise = null; throw e; });
     return listingsPromise;
   }
 

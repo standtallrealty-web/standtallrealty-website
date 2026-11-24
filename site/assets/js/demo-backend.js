@@ -1,5 +1,5 @@
 /* DEMO MODE ONLY — runs the real backend code inside your browser so the site can be tried before the
-   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611241325. */
+   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611241330. */
 /*
  * Minimal Google Apps Script runtime emulator.
  * Used (1) by the automated tests in Node and (2) by the website's demo mode in the browser,
@@ -545,7 +545,8 @@ function whatsappSetup() {
   Logger.log('✅ Template "login_code" is approved.');
   var sub = call('post', encodeURIComponent(waba) + '/subscribed_apps');
   Logger.log(sub.ok ? '✅ App linked to your WhatsApp account.' : '⚠️ Could not link the app to your WhatsApp account: ' + sub.err);
-  // 3. a real test: a code to the firm's own WhatsApp
+  // 3. a real test: a code to the firm's own WhatsApp (unless the codes come from that very number)
+  if (digits.slice(-10) === FIRM_PHONE) return Logger.log('✅ WhatsApp OTP is ready. Deploy a New version, then test it: website → Log in → your mobile number → Send code on WhatsApp.');
   try {
     waOtpSend_(FIRM_PHONE, newOtp_());
     Logger.log('✅ Test code sent to +91 ' + FIRM_PHONE + ' on WhatsApp. Check that phone, then Deploy a New version. WhatsApp OTP is ready.');
