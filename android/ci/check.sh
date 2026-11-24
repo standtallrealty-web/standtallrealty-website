@@ -42,8 +42,11 @@ fi
   echo "== /wa-hook (POST without signature)"; curl -sS -o /dev/null -w "%{http_code}\n" -X POST -d '{}' https://www.standtallrealty.com/wa-hook
   echo "== /login"; curl -sS -o /dev/null -w "%{http_code} %{content_type}\n" https://www.standtallrealty.com/login
   # login settings from the edge: the second answer should be fast (no Apps Script)
-  echo "== /api/config (first)"; curl -sS -w "\n  [%{http_code}, %{time_total}s]\n" https://www.standtallrealty.com/api/config
-  echo "== /api/config (again)"; curl -sS -o /dev/null -w "  [%{http_code}, %{time_total}s]\n" https://www.standtallrealty.com/api/config
+  echo "== /api/config (first)"; curl -sS -D cfg1.h -w "\n  [%{http_code}, %{time_total}s]\n" https://www.standtallrealty.com/api/config
+  grep -i "^x-stale" cfg1.h || echo "  (fresh copy)"
+  sleep 5
+  echo "== /api/config (again)"; curl -sS -D cfg2.h -o /dev/null -w "  [%{http_code}, %{time_total}s]\n" https://www.standtallrealty.com/api/config
+  grep -i "^x-stale" cfg2.h || echo "  (fresh copy)"
   echo "== /app/version.json"; curl -sS https://www.standtallrealty.com/app/version.json
 } > out/live-site.txt 2>&1
 echo "signed=$signed" >> "$GITHUB_OUTPUT"

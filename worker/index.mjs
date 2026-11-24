@@ -29,7 +29,7 @@ const ANDROID_APP_FINGERPRINTS = [
 // WhatsApp webhook check word, typed in Meta's webhook settings. Not a secret: every message is also
 // signed by Meta with the app secret, and Code.gs checks that signature.
 const WA_VERIFY_TOKEN = 'standtall-whatsapp-login';
-const CONFIG_FRESH = 300000;   // ms: after this the edge copy of the login settings is refreshed in the background
+const CONFIG_FRESH = 60000;    // ms: after this the edge copy of the login settings is refreshed in the background
 const SSR_MARK = '<!--area-ssr--><div class="skeleton" style="min-height:280px;grid-column:1/-1"></div>';
 
 export default {
@@ -143,16 +143,19 @@ function areaFor(list, locality) {
   return list.find(a => a.match.some(m => loc.indexOf(m.toLowerCase()) >= 0)) || null;
 }
 
-/** Login settings from the edge cache. An old copy is still answered at once, and refreshed in the background. */
+/** Login settings from the edge cache. An old copy is still answered at once, refreshed in the background,
+    and marked x-stale: 1 so the page asks again a few seconds later and picks up a change at once. */
 async function configJson(env, ctx, url) {
   const cache = typeof caches !== 'undefined' ? caches.default : null;
   const key = new Request(SITE + '/__worker_cache/config-v1');
-  const send = (text, status) => new Response(text, { status: status || 200,
-    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
+  const send = (text, status, stale) => new Response(text, { status: status || 200,
+    headers: Object.assign({ 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' },
+      stale ? { 'x-stale': '1' } : {}) });
   const hit = cache ? await cache.match(key) : null;
   if (hit) {
-    if (Date.now() - Number(hit.headers.get('x-fetched') || 0) > CONFIG_FRESH) ctx.waitUntil(refreshConfig(env, url, cache, key).catch(() => {}));
-    return send(await hit.text());
+    const stale = Date.now() - Number(hit.headers.get('x-fetched') || 0) > CONFIG_FRESH;
+    if (stale) ctx.waitUntil(refreshConfig(env, url, cache, key).catch(() => {}));
+    return send(await hit.text(), 200, stale);
   }
   try {
     const text = await refreshConfig(env, url, cache, key);

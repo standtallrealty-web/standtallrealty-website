@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611241338';
+  var VER = '202611241344';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -217,15 +217,18 @@
       kept at the edge; the Google Sheet itself is the fallback. */
   var otpVia = 'sms', cfgListeners = [];
   function onConfigChange(fn) { cfgListeners.push(fn); }
-  function fetchConfig() {
+  function fetchConfig(again) {
+    var stale = false;
     var edge = DEMO || !/^https:/.test(location.protocol) ? Promise.reject() :
-      fetch('/api/config', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      fetch('/api/config', { cache: 'no-store' }).then(function (r) { stale = r.headers.get('x-stale') === '1'; return r.ok ? r.json() : Promise.reject(); })
         .then(function (j) { return j && j.ok && j.data ? j.data : Promise.reject(); });
-    return edge.catch(function () { return api('config'); }).then(function (v) {
+    return edge.catch(function () { stale = false; return api('config'); }).then(function (v) {
       var old = store.json('st_cfg', null);
       store.setJson('st_cfg', { t: Date.now(), u: API_URL, v: v });
       if (v && v.otpVia) otpVia = v.otpVia;
       if (old && old.v && JSON.stringify(old.v) !== JSON.stringify(v)) cfgListeners.forEach(function (fn) { try { fn(v); } catch (e) {} });
+      // the edge copy was old and is being refreshed now: ask once more in a few seconds
+      if (stale && !again) setTimeout(function () { fetchConfig(true).catch(function () {}); }, 5000);
       return v;
     });
   }
@@ -234,7 +237,7 @@
     var c = store.json('st_cfg', null);
     if (c && c.u === API_URL && c.v) {
       if (c.v.otpVia) otpVia = c.v.otpVia;
-      if (Date.now() - c.t > 600000) fetchConfig().catch(function () {});   // older than 10 minutes: refresh for next time
+      if (Date.now() - c.t > 60000) fetchConfig().catch(function () {});   // older than a minute: refresh quietly
       return (cfgPromise = Promise.resolve(c.v));
     }
     cfgPromise = fetchConfig().catch(function () { cfgPromise = null; return { otp: false }; });
