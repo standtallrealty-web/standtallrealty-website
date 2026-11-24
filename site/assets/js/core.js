@@ -3,7 +3,7 @@
   'use strict';
   var S = window.SITE || {};
   var LOC = window.ST_LOC;
-  var VER = '202611232314';
+  var VER = '202611241325';
   var scriptSrc = (document.currentScript && document.currentScript.src) || '';
   var ASSETS = scriptSrc ? scriptSrc.replace(/js\/core\.js.*$/, '') : 'assets/';
 
@@ -40,6 +40,18 @@
     try { if (yes) sessionStorage.setItem('st_app', '1'); return yes || sessionStorage.getItem('st_app') === '1'; } catch (e) { return yes; }
   })();
   if (IN_APP) document.documentElement.classList.add('in-app');
+  // Which app version is open? Apps from 1.2.0 add app_v (version code) and app_src (web or play) to the
+  // address they open; the login check in <head> keeps them for this visit. Older apps add nothing: 0.
+  var APP = IN_APP ? (function () {
+    var a = { v: 0, src: 'web' };
+    try {
+      var q = new URLSearchParams(location.search), ss = sessionStorage;
+      if (/^\d+$/.test(q.get('app_v') || '')) { ss.setItem('st_app_v', q.get('app_v')); ss.setItem('st_app_src', q.get('app_src') === 'play' ? 'play' : 'web'); }
+      if (!ss.getItem('st_app_v')) ss.setItem('st_app_v', '0');
+      a.v = Number(ss.getItem('st_app_v')) || 0; a.src = ss.getItem('st_app_src') || 'web';
+    } catch (e) {}
+    return a;
+  })() : null;
 
   // ---------------------------------------------------------------- formatting
   function trimNum(x) { return String(Math.round(x * 100) / 100); }
@@ -199,12 +211,33 @@
 
   // Is OTP switched on in Code.gs? Asked once, remembered for 10 minutes.
   var cfgPromise = null;
+  /** Login settings (OTP on? by WhatsApp or SMS? Google / Facebook IDs). The login screen must not wait for the
+      Google Sheet: the last known settings answer at once, and a fresh copy is fetched quietly for next time
+      (and for an untouched login screen, through onConfigChange). The website's /api/config is a fast copy
+      kept at the edge; the Google Sheet itself is the fallback. */
+  var otpVia = 'sms', cfgListeners = [];
+  function onConfigChange(fn) { cfgListeners.push(fn); }
+  function fetchConfig() {
+    var edge = DEMO || !/^https:/.test(location.protocol) ? Promise.reject() :
+      fetch('/api/config', { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+        .then(function (j) { return j && j.ok && j.data ? j.data : Promise.reject(); });
+    return edge.catch(function () { return api('config'); }).then(function (v) {
+      var old = store.json('st_cfg', null);
+      store.setJson('st_cfg', { t: Date.now(), u: API_URL, v: v });
+      if (v && v.otpVia) otpVia = v.otpVia;
+      if (old && old.v && JSON.stringify(old.v) !== JSON.stringify(v)) cfgListeners.forEach(function (fn) { try { fn(v); } catch (e) {} });
+      return v;
+    });
+  }
   function siteConfig() {
     if (cfgPromise) return cfgPromise;
     var c = store.json('st_cfg', null);
-    if (c && c.u === API_URL && c.v && Date.now() - c.t < 600000) return (cfgPromise = Promise.resolve(c.v));
-    cfgPromise = api('config').then(function (v) { store.setJson('st_cfg', { t: Date.now(), u: API_URL, v: v }); return v; })
-      .catch(function () { cfgPromise = null; return { otp: false }; });
+    if (c && c.u === API_URL && c.v) {
+      if (c.v.otpVia) otpVia = c.v.otpVia;
+      if (Date.now() - c.t > 600000) fetchConfig().catch(function () {});   // older than 10 minutes: refresh for next time
+      return (cfgPromise = Promise.resolve(c.v));
+    }
+    cfgPromise = fetchConfig().catch(function () { cfgPromise = null; return { otp: false }; });
     return cfgPromise;
   }
 
@@ -223,7 +256,8 @@
   var gisReady = null, gisHandler = null;
   function googleSignIn(clientId) {
     if (!gisReady) gisReady = loadScript('https://accounts.google.com/gsi/client').then(function () {
-      window.google.accounts.id.initialize({ client_id: clientId, ux_mode: 'popup', context: 'signin', itp_support: true,
+      // use_fedcm_for_button: tapping the button shows the Google accounts on the phone to pick from (Chrome's own sheet).
+      window.google.accounts.id.initialize({ client_id: clientId, ux_mode: 'popup', context: 'signin', itp_support: true, use_fedcm_for_button: true,
         callback: function (r) { if (gisHandler && r && r.credential) gisHandler(r.credential); } });
       return window.google.accounts.id;
     }).catch(function (e) { gisReady = null; throw e; });
@@ -333,16 +367,18 @@
   }
 
   // ---------------------------------------------------------------- OTP entry (enquiry forms + login)
+  /** The 6-digit code box. opts.via: 'whatsapp' (code sent on WhatsApp) or 'sms'. */
   function otpBox(opts) {
-    var el = document.createElement('div');
-    el.className = 'otp-box';
+    var el = document.createElement('div'), viaWa = (opts.via || otpVia) === 'whatsapp';
+    el.className = 'otp-box' + (viaWa ? ' via-wa' : '');
     el.innerHTML =
-      '<p class="otp-to">We sent a 6-digit OTP by SMS to <b>' + esc(fmtPhone(opts.phone)) + '</b>. <button type="button" class="btn-link" data-change>Change number</button></p>' +
-      '<form class="stack" novalidate><label class="field"><span>Enter OTP</span><input class="otp-input" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" placeholder="6 digits" required></label>' +
+      '<p class="otp-to">' + (viaWa ? icon('wa') + 'We sent a 6-digit code on WhatsApp to <b>' : 'We sent a 6-digit OTP by SMS to <b>') + esc(fmtPhone(opts.phone)) + '</b>. <button type="button" class="btn-link" data-change>Change number</button></p>' +
+      '<form class="stack" novalidate><label class="field"><span>' + (viaWa ? 'Enter the code' : 'Enter OTP') + '</span><input class="otp-input" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" placeholder="6 digits" required></label>' +
       '<div class="form-actions"><button class="btn btn-gold btn-block" type="submit">' + esc(opts.verifyLabel || 'Verify') + '</button></div></form>' +
-      '<p class="otp-resend small muted"><span data-wait></span><button type="button" class="btn-link" data-resend hidden>Resend OTP</button></p>' +
+      '<p class="otp-resend small muted"><span data-wait></span><button type="button" class="btn-link" data-resend hidden>' + (viaWa ? 'Resend code' : 'Resend OTP') + '</button></p>' +
       '<p class="otp-demo small" data-demo-row hidden>Preview mode sends no SMS. Your OTP is <b data-demo></b></p>' +
-      (opts.waText ? '<p class="otp-alt small muted">No SMS after a minute? <a href="' + wa(opts.waText) + '" target="_blank" rel="noopener">Message us on WhatsApp</a></p>' : '');
+      (viaWa ? '<p class="otp-alt small muted">No code after a minute? Check that this number has WhatsApp, then tap Resend code.</p>'
+        : opts.waText ? '<p class="otp-alt small muted">No SMS after a minute? <a href="' + wa(opts.waText) + '" target="_blank" rel="noopener">Message us on WhatsApp</a></p>' : '');
     var form = $('form', el), input = form.otp, btn = $('button[type=submit]', form), rs = $('[data-resend]', el), waitEl = $('[data-wait]', el);
     var timer = null, sending = false, seen = false;
     function demo(code) { var row = $('[data-demo-row]', el); row.hidden = !code; if (code) $('[data-demo]', el).textContent = code; }
@@ -352,14 +388,14 @@
       function tick() {
         if (document.body.contains(el)) seen = true; else if (seen) { clearInterval(timer); return; } // stop once the box is gone
         rs.hidden = left > 0;
-        waitEl.textContent = left > 0 ? 'Resend OTP in ' + left + ' s' : '';
+        waitEl.textContent = left > 0 ? (viaWa ? 'Resend code in ' : 'Resend OTP in ') + left + ' s' : '';
         if (left-- <= 0) clearInterval(timer);
       }
       tick(); timer = setInterval(tick, 1000);
     }
     function submit() {
       var v = input.value.replace(/\D/g, '');
-      if (v.length !== 6) { fieldError(form, 'Enter the 6-digit OTP from the SMS.'); input.focus(); return; }
+      if (v.length !== 6) { fieldError(form, viaWa ? 'Enter the 6-digit code from WhatsApp.' : 'Enter the 6-digit OTP from the SMS.'); input.focus(); return; }
       if (sending) return;
       sending = true; fieldError(form, ''); busy(btn, true, 'Checking…');
       Promise.resolve(opts.onVerify(v)).then(function () { clearInterval(timer); }).catch(function (err) {
@@ -379,7 +415,7 @@
       Promise.resolve(opts.onResend()).then(function (r) {
         busy(rs, false); input.value = ''; input.focus();
         countdown((r && r.resendIn) || 30); demo(r && r.demoOtp);
-        toast('A new OTP is on its way.', 'ok');
+        toast(viaWa ? 'A new code is on its way to your WhatsApp.' : 'A new OTP is on its way.', 'ok');
       }).catch(function (err) {
         busy(rs, false); fieldError(form, err.message);
         if (err.code === 'OTP_WAIT') { var w = /(\d+) seconds/.exec(err.message); countdown(w ? Number(w[1]) : 30); }
@@ -405,121 +441,36 @@
         m = { el: opts.container, body: $('.login-body', opts.container), close: function () {} };
       } else {
         m = openModal({ title: 'Log in or sign up', size: 'sm', body: '<div class="skeleton" style="min-height:190px"></div>',
-          onClose: function () { waStop(); if (!done) reject(new ApiError('Login cancelled', 'CANCELLED')); } });
+          onClose: function () { if (!done) reject(new ApiError('Login cancelled', 'CANCELLED')); } });
       }
       var body = m.body;
       var reasonHtml = reason ? '<p class="modal-reason">' + esc(reason) + '</p>' : '';
       var terms = '<p class="small muted center">By continuing you agree to our <a href="terms.html" target="_blank">terms</a> and <a href="privacy.html" target="_blank">privacy policy</a>.</p>';
       function title(t) { var h = $(opts.container ? '.login-title' : 'h2', m.el); if (h) h.textContent = t; }
       function focusFirst() { focusSoon(function () { return $('input:not([type=hidden])', body); }, body, 40); }
-      var cfg = {};   // site settings: OTP on? WhatsApp login on? Google / Facebook IDs
-      function hasMethods() { return !!(cfg.wa || cfg.google || cfg.facebook); }
+      var cfg = {};   // site settings: OTP on (by WhatsApp or SMS)? Google / Facebook IDs
+      var touched = false;   // the visitor has started typing or tapping: never redraw under them
+      body.addEventListener('input', function () { touched = true; }, true);
+      body.addEventListener('click', function () { touched = true; }, true);
+      function viaWa() { return cfg.otp && cfg.otpVia === 'whatsapp'; }
+      function hasSocial() { return !!(cfg.google || cfg.facebook); }
       function socialHtml() {
-        if (!cfg.google && !cfg.facebook) return '';
+        if (!hasSocial()) return '';
         return (cfg.google ? '<div class="g-btn" data-google><button type="button" class="btn btn-ghost btn-block" disabled>Continue with Google</button></div>' : '') +
           (cfg.facebook ? '<button type="button" class="btn btn-fb btn-block" data-facebook>' + icon('fb') + 'Continue with Facebook</button>' : '');
       }
-      function backHtml() { return hasMethods() ? '<p class="center" style="margin:0"><button type="button" class="btn-link" data-back>Other ways to log in</button></p>' : ''; }
-      function wireBack() { var b = $('[data-back]', body); if (b) b.onclick = function () { waStop(); methodsStep(); }; }
+      function backHtml() { return cfg.otp || hasSocial() ? '<p class="center" style="margin:0"><button type="button" class="btn-link" data-back>Other ways to log in</button></p>' : ''; }
+      function wireBack() { var b = $('[data-back]', body); if (b) b.onclick = function () { start(); }; }
 
-      // First screen when WhatsApp, Google or Facebook login is on: one big button each.
+      // Google / Facebook without OTP: one big button each, and mobile number with password.
       function methodsStep() {
-        title(opts.container ? 'Log in or sign up' : 'Log in or sign up');
-        body.innerHTML = reasonHtml + '<div class="social-login">' +
-          (cfg.wa ? '<button type="button" class="btn btn-wa btn-block" data-wa>' + icon('wa') + 'Continue with WhatsApp</button>' : '') +
-          socialHtml() + '<p class="social-msg small" role="alert" hidden></p></div>' +
-          '<p class="center" style="margin:4px 0 0"><button type="button" class="btn-link" data-phone>' +
-          (cfg.wa ? 'Log in with mobile number and password' : 'Use my mobile number') + '</button></p>' + terms;
-        if (cfg.wa) $('[data-wa]', body).onclick = function () { waStep('login'); };
-        $('[data-phone]', body).onclick = function () { if (cfg.otp) phoneStep(''); else passwordTabs(); };
+        title('Log in or sign up');
+        body.innerHTML = reasonHtml + '<div class="social-login">' + socialHtml() + '<p class="social-msg small" role="alert" hidden></p></div>' +
+          '<p class="center" style="margin:4px 0 0"><button type="button" class="btn-link" data-phone>Log in with mobile number and password</button></p>' + terms;
+        $('[data-phone]', body).onclick = function () { passwordTabs(); };
         wireSocial();
       }
 
-      // ---- WhatsApp: the client sends a short code from their own WhatsApp, so WhatsApp tells us their number.
-      // Free for both sides. mode 'login' logs in; mode 'phone' only proves the number (after Google / Facebook).
-      var waTimer = null, waVisible = null;
-      function waStop() {
-        if (waTimer) { clearTimeout(waTimer); waTimer = null; }
-        if (waVisible) { document.removeEventListener('visibilitychange', waVisible); waVisible = null; }
-      }
-      function waStep(mode, onProof) {
-        waStop();
-        title(mode === 'phone' ? 'Add your mobile number' : 'Continue with WhatsApp');
-        body.innerHTML = '<div class="wa-step stack">' +
-          '<ol class="wa-how"><li>Tap Open WhatsApp.</li><li>WhatsApp opens with a code already typed. Tap Send.</li>' +
-          '<li>' + (mode === 'phone' ? 'Come back here. Your number is added.' : 'Come back here. You are logged in.') + '</li></ol>' +
-          '<a class="btn btn-wa btn-block" data-wa-open href="#" aria-disabled="true">' + icon('wa') + 'Open WhatsApp</a>' +
-          '<p class="wa-status small" role="status" hidden></p>' +
-          '<p class="wa-manual small muted" hidden></p>' +
-          (mode === 'phone' ? '' : backHtml()) + '</div>';
-        if (mode !== 'phone') wireBack();
-        var open = $('[data-wa-open]', body), status = $('.wa-status', body), started = null, opened = false, ends = 0;
-        function say(t, bad) { status.hidden = !t; status.textContent = t || ''; status.classList.toggle('bad', !!bad); }
-        function restart(t) {
-          waStop(); say(t, true);
-          open.textContent = 'Start again'; open.setAttribute('href', '#'); open.removeAttribute('aria-disabled');
-          open.onclick = function (e) { e.preventDefault(); waStep(mode, onProof); };
-        }
-        api('waStart', { mode: mode }).then(function (r) {
-          if (!document.body.contains(open)) return;
-          started = r; ends = Date.now() + (r.expiresIn || 900) * 1000;
-          var android = /Android/i.test(navigator.userAgent);
-          // Android: open the WhatsApp app and keep this page, so it can finish the login when the client comes back.
-          var href = android ? 'intent://send/?phone=' + r.number + '&text=' + encodeURIComponent(r.text) +
-            '#Intent;scheme=whatsapp;S.browser_fallback_url=' + encodeURIComponent(r.link) + ';end' : r.link;
-          open.setAttribute('href', href); open.removeAttribute('aria-disabled');
-          if (!android) { open.target = '_blank'; open.rel = 'noopener'; }
-          var manual = $('.wa-manual', body);
-          manual.textContent = 'No WhatsApp on this device? From your phone, send ' + r.code + ' to +' + r.number + ' on WhatsApp.';
-          manual.hidden = android;
-          open.onclick = function () {
-            if (!opened) { opened = true; say('Waiting for your WhatsApp message…'); poll(2500); }
-          };
-        }).catch(function (err) {
-          if (err.code === 'WA_OFF') { store.del('st_cfg'); cfgPromise = null; cfg.wa = false; return start(); }
-          restart(err.message);
-        });
-        function poll(ms) {
-          waStop();
-          waVisible = function () { if (document.visibilityState === 'visible') poll(50); };
-          document.addEventListener('visibilitychange', waVisible);
-          waTimer = setTimeout(function () {
-            if (!document.body.contains(open)) return waStop();
-            if (Date.now() > ends) return restart('This code has expired. Please start again.');
-            api('waCheck', { code: started.code, key: started.key }).then(function (c) {
-              if (!document.body.contains(open)) return;
-              if (!c.ready) return poll(2500);
-              waStop(); say('Got it. One moment…');
-              return api('waLogin', { code: started.code, key: started.key }).then(function (x) {
-                if (mode === 'phone') return onProof(x.proof, x.phone);
-                if (x.needName) return waNameStep(x);
-                finish(x, false);
-              });
-            }).catch(function (err) {
-              if (err.code === 'WA_EXPIRED' || err.code === 'WA_NUMBER') return restart(err.message);
-              poll(4000);                    // a network hiccup: keep trying
-            });
-          }, ms);
-        }
-      }
-      function waNameStep(x) {
-        title('Create your account');
-        body.innerHTML = '<form class="stack" data-step="wa-name" novalidate><p class="verified-note">' + icon('shield') + esc(fmtPhone(x.phone)) + ' verified</p>' +
-          '<label class="field"><span>Full name</span><input name="name" autocomplete="name" required></label>' +
-          '<label class="field"><span>Email <em>(optional)</em></span><input name="email" type="email" autocomplete="email"></label>' +
-          '<div class="form-actions"><button class="btn btn-gold btn-block" type="submit">Create account</button></div>' + terms + '</form>';
-        var form = $('form', body);
-        form.name.value = x.name || '';
-        form.addEventListener('submit', function (e) {
-          e.preventDefault();
-          var d = formData(form), btn = $('button[type=submit]', form);
-          if ((d.name || '').trim().length < 2) { form.name.focus(); return fieldError(form, 'Enter your full name.'); }
-          fieldError(form, ''); busy(btn, true, 'Creating account…');
-          api('waLogin', { proof: x.proof, name: d.name, email: d.email }).then(function (r) { finish(r, !!r.created); })
-            .catch(function (err) { busy(btn, false); fieldError(form, err.message); if (err.code === 'WA_EXPIRED') setTimeout(start, 1600); });
-        });
-        focusSoon(function () { return form.name.value ? form.email : form.name; }, body, 40);
-      }
       function socialMsg(t) { var el = $('.social-msg', body); if (el) { el.textContent = t || ''; el.hidden = !t; } }
       function wireSocial() {
         var g = $('[data-google]', body), f = $('[data-facebook]', body);
@@ -552,17 +503,18 @@
           if (x.needPhone) socialPhoneStep(x); else finish(x, false);
         }).catch(function (err) { btns.forEach(function (b) { b.disabled = false; }); socialMsg(err.message); });
       }
-      // New Google / Facebook sign-in: we still need the mobile number (proved by OTP when OTP is on).
+      // New Google / Facebook sign-in: the mobile number is required, proved by a code (WhatsApp or SMS) when OTP is on.
       function socialPhoneStep(x, prefill) {
-        if (cfg.wa) return socialWaStep(x, prefill);
-        var useOtp = !!cfg.otp;
+        var useOtp = !!cfg.otp, wa1 = viaWa();
         title('One more step');
         body.innerHTML = '<form class="stack" data-step="social" novalidate>' +
           '<p class="verified-note">' + icon('check') + (x.provider === 'facebook' ? 'Signed in with Facebook' : 'Signed in with Google') + '</p>' +
-          '<p class="small muted" style="margin:0">Add your mobile number so our team can reply about properties. We never share it without your OK.</p>' +
+          '<p class="small muted" style="margin:0">' + (wa1 ? 'Add your WhatsApp number so our team can reply about properties. We never share it without your OK.'
+            : 'Add your mobile number so our team can reply about properties. We never share it without your OK.') + '</p>' +
           '<label class="field"><span>Full name</span><input name="name" autocomplete="name" required></label>' +
-          '<label class="field"><span>Mobile number</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" required></label>' +
-          '<div class="form-actions"><button class="btn btn-gold btn-block" type="submit">' + (useOtp ? 'Get OTP' : 'Create account') + '</button></div>' + terms + '</form>';
+          '<label class="field"><span>' + (wa1 ? 'WhatsApp number' : 'Mobile number') + '</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" required></label>' +
+          '<div class="form-actions"><button class="btn ' + (wa1 ? 'btn-wa' : 'btn-gold') + ' btn-block" type="submit">' +
+          (!useOtp ? 'Create account' : wa1 ? icon('wa') + 'Send code on WhatsApp' : 'Get OTP') + '</button></div>' + terms + '</form>';
         var form = $('form', body);
         form.name.value = (prefill && prefill.name) || x.name || '';
         if (prefill && prefill.phone) form.phone.value = prefill.phone;
@@ -577,35 +529,14 @@
             return api('socialLogin', { proof: x.proof, phone: phone, name: d.name }).then(function (r) { finish(r, !!r.created); })
               .catch(function (err) { busy(btn, false); socialError(form, err, x, phone); });
           }
-          busy(btn, true, 'Sending OTP…');
+          busy(btn, true, wa1 ? 'Sending code…' : 'Sending OTP…');
           api('sendOtp', { phone: phone, purpose: 'login' }).then(function (r) { socialOtpStep(x, phone, d.name, r); }).catch(function (err) {
             busy(btn, false);
-            if (err.code === 'OTP_WAIT') return socialOtpStep(x, phone, d.name, { resendIn: waitSeconds(err) });
+            if (err.code === 'OTP_WAIT') return socialOtpStep(x, phone, d.name, { resendIn: waitSeconds(err), via: cfg.otpVia });
             fieldError(form, err.message);
           });
         });
         focusSoon(function () { return form.name.value ? form.phone : form.name; }, body, 40);
-      }
-      // Google / Facebook + WhatsApp: the client's name, then WhatsApp proves their mobile number.
-      function socialWaStep(x, prefill) {
-        title('One more step');
-        body.innerHTML = '<form class="stack" data-step="social" novalidate>' +
-          '<p class="verified-note">' + icon('check') + (x.provider === 'facebook' ? 'Signed in with Facebook' : 'Signed in with Google') + '</p>' +
-          '<p class="small muted" style="margin:0">Add your mobile number with WhatsApp, so our team can reply about properties. We never share it without your OK.</p>' +
-          '<label class="field"><span>Full name</span><input name="name" autocomplete="name" required></label>' +
-          '<div class="form-actions"><button class="btn btn-wa btn-block" type="submit" data-wa-phone>' + icon('wa') + 'Add my number with WhatsApp</button></div>' + terms + '</form>';
-        var form = $('form', body);
-        form.name.value = (prefill && prefill.name) || x.name || '';
-        form.addEventListener('submit', function (e) {
-          e.preventDefault();
-          var name = (form.name.value || '').trim();
-          if (name.length < 2) { form.name.focus(); return fieldError(form, 'Enter your full name.'); }
-          waStep('phone', function (phoneProof) {
-            return api('socialLogin', { proof: x.proof, phoneProof: phoneProof, name: name }).then(function (r) { finish(r, !!r.created); })
-              .catch(function (err) { socialWaStep(x, { name: name }); fieldError($('form', body), err.message); if (err.code === 'SOCIAL_EXPIRED') setTimeout(start, 1600); });
-          });
-        });
-        focusSoon(function () { return form.name.value ? $('button[type=submit]', form) : form.name; }, body, 40);
       }
       function socialError(form, err, x, phone) {
         fieldError(form, err.message);
@@ -618,18 +549,18 @@
         if (err.code === 'SOCIAL_EXPIRED') setTimeout(start, 1600);
       }
       function socialOtpStep(x, phone, name, r) {
-        title('Enter the OTP');
+        title((r.via || cfg.otpVia) === 'whatsapp' ? 'Enter the code' : 'Enter the OTP');
         body.innerHTML = '';
-        body.appendChild(otpBox({ phone: phone, resendIn: r.resendIn, demoOtp: r.demoOtp, verifyLabel: 'Verify and continue',
+        body.appendChild(otpBox({ phone: phone, resendIn: r.resendIn, demoOtp: r.demoOtp, via: r.via || cfg.otpVia, verifyLabel: 'Verify and continue',
           onVerify: function (code) {
             return api('socialLogin', { proof: x.proof, phone: phone, name: name, otp: code }).then(function (res) { finish(res, !!res.created); });
           },
           onResend: function () { return api('sendOtp', { phone: phone, purpose: 'login' }); },
           onChange: function () { socialPhoneStep(x, { name: name, phone: phone }); } }));
       }
-      function start() { if (hasMethods()) methodsStep(); else if (cfg.otp) phoneStep(''); else passwordTabs(); }
+      function start() { if (cfg.otp) phoneStep(''); else if (hasSocial()) methodsStep(); else passwordTabs(); }
       function finish(r, created) {
-        done = true; waStop();
+        done = true;
         Auth.set(r.token, r.user);
         toast((created ? 'Account created. Welcome, ' : 'Welcome back, ') + r.user.name.split(' ')[0] + '.', 'ok');
         m.close();
@@ -637,24 +568,27 @@
       }
 
       function phoneStep(prefill) {
+        var wa1 = viaWa();
         title('Log in or sign up');
         body.innerHTML = reasonHtml + '<form class="stack" data-step="phone" novalidate>' +
-          '<label class="field"><span>Mobile number</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" required></label>' +
-          '<div class="form-actions"><button class="btn btn-gold btn-block" type="submit">Get OTP</button></div>' +
-          '<p class="small muted center" style="margin:0">New here? The same OTP creates your free account.</p>' +
-          '<p class="center" style="margin:0"><button type="button" class="btn-link" data-pw>Log in with password instead</button></p>' + backHtml() + terms + '</form>';
+          '<label class="field"><span>' + (wa1 ? 'WhatsApp number' : 'Mobile number') + '</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" required></label>' +
+          '<div class="form-actions"><button class="btn ' + (wa1 ? 'btn-wa' : 'btn-gold') + ' btn-block" type="submit">' + (wa1 ? icon('wa') + 'Send code on WhatsApp' : 'Get OTP') + '</button></div>' +
+          '<p class="small muted center" style="margin:0">' + (wa1 ? 'We send a 6-digit code to this number on WhatsApp. New here? The same code creates your free account.'
+            : 'New here? The same OTP creates your free account.') + '</p></form>' +
+          (hasSocial() ? '<div class="or-line"><span>or</span></div><div class="social-login">' + socialHtml() + '<p class="social-msg small" role="alert" hidden></p></div>' : '') +
+          '<p class="center" style="margin:0"><button type="button" class="btn-link" data-pw>Log in with password instead</button></p>' + terms;
         var form = $('form', body);
-        wireBack();
+        if (hasSocial()) wireSocial();
         if (prefill) form.phone.value = prefill;
         $('[data-pw]', body).onclick = function () { passwordStep(normPhone(form.phone.value) || ''); };
         form.addEventListener('submit', function (e) {
           e.preventDefault();
           var phone = normPhone(form.phone.value), btn = $('button[type=submit]', form);
           if (!phone) { form.phone.focus(); return fieldError(form, 'Enter a valid 10-digit mobile number.'); }
-          fieldError(form, ''); busy(btn, true, 'Sending OTP…');
+          fieldError(form, ''); busy(btn, true, wa1 ? 'Sending code…' : 'Sending OTP…');
           api('sendOtp', { phone: phone, purpose: 'login' }).then(function (r) { otpStep(phone, r); }).catch(function (err) {
             busy(btn, false);
-            if (err.code === 'OTP_WAIT') return otpStep(phone, { resendIn: waitSeconds(err) }); // the OTP sent a moment ago still works
+            if (err.code === 'OTP_WAIT') return otpStep(phone, { resendIn: waitSeconds(err), via: cfg.otpVia }); // the code sent a moment ago still works
             if (err.code === 'OTP_OFF') { store.del('st_cfg'); cfgPromise = null; cfg.otp = false; return passwordTabs(); } // OTP was switched off
             fieldError(form, err.message);
           });
@@ -663,9 +597,9 @@
       }
 
       function otpStep(phone, r) {
-        title('Enter the OTP');
+        title((r.via || cfg.otpVia) === 'whatsapp' ? 'Enter the code' : 'Enter the OTP');
         body.innerHTML = reasonHtml;
-        body.appendChild(otpBox({ phone: phone, resendIn: r.resendIn, demoOtp: r.demoOtp, verifyLabel: 'Verify and continue',
+        body.appendChild(otpBox({ phone: phone, resendIn: r.resendIn, demoOtp: r.demoOtp, via: r.via || cfg.otpVia, verifyLabel: 'Verify and continue',
           onVerify: function (code) {
             return api('otpLogin', { phone: phone, otp: code }).then(function (x) { if (x.needName) nameStep(phone, x.proof); else finish(x, false); });
           },
@@ -697,7 +631,7 @@
           '<label class="field"><span>Mobile number</span><input name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile" required></label>' +
           '<label class="field"><span>Password</span><input name="password" type="password" autocomplete="current-password" required></label>' +
           '<div class="form-actions"><button class="btn btn-navy btn-block" type="submit">Log in</button></div>' +
-          '<p class="small muted center" style="margin:0">No password, or forgot it? <button type="button" class="btn-link" data-otp>Log in with OTP</button></p></form>';
+          '<p class="small muted center" style="margin:0">No password, or forgot it? <button type="button" class="btn-link" data-otp>' + (viaWa() ? 'Get a code on WhatsApp' : 'Log in with OTP') + '</button></p></form>';
         var form = $('form', body);
         if (prefill) form.phone.value = prefill;
         $('[data-otp]', body).onclick = function () { phoneStep(normPhone(form.phone.value) || ''); };
@@ -760,7 +694,9 @@
         cfg = c || {};
         start();
       });
-      if (opts.container) opts.container.addEventListener('login:restart', function () { waStop(); start(); });
+      // Settings changed since last time (say WhatsApp OTP was just switched on): redraw if nobody has touched it yet.
+      onConfigChange(function (c) { if (!done && !touched && document.body.contains(m.el)) { cfg = c || {}; start(); } });
+      if (opts.container) opts.container.addEventListener('login:restart', function () { start(); });
     });
   }
 
@@ -1233,7 +1169,7 @@
           var step = document.createElement('div');
           step.className = 'lead-otp stack';
           step.innerHTML = '<div><h3>Verify your mobile number</h3><p class="muted small" style="margin:0">One last step, so our team calls you on the right number.</p></div>';
-          step.appendChild(otpBox({ phone: r.otp.phone || phone, resendIn: r.otp.resendIn, demoOtp: r.otp.demoOtp, verifyLabel: 'Verify number', waText: waText,
+          step.appendChild(otpBox({ phone: r.otp.phone || phone, resendIn: r.otp.resendIn, demoOtp: r.otp.demoOtp, via: r.otp.via, verifyLabel: 'Verify number', waText: waText,
             onVerify: function (code) { return api('verifyLead', { id: r.id, phone: r.otp.phone || phone, otp: code }).then(function () { finished(true); }); },
             onResend: function () { return api('sendOtp', { phone: r.otp.phone || phone, purpose: 'lead', leadId: r.id }); },
             onChange: function () { el.innerHTML = ''; el.appendChild(form); busy(btn, false); form.phone.focus(); try { form.phone.select(); } catch (e) {} } }));
@@ -1300,6 +1236,50 @@
     }).join('');
   }
 
+  // ---------------------------------------------------------------- "Update the app"
+  /** In the Android app installed from our website: when /app/version.json has a newer version than the
+   *  one open, offer the update. Once updated, the app reports the new version and this stays quiet.
+   *  Apps from Google Play are updated by Play, so they never see it. "Later" waits a day. */
+  function appUpdateCheck(tries) {
+    if (!APP || APP.src === 'play' || document.body.dataset.page === 'admin') return;
+    try { if (sessionStorage.getItem('st_upd_tapped')) return; } catch (e) {}
+    if (document.body.classList.contains('modal-open')) {              // a login or other window is open: wait
+      if ((tries || 0) < 20) setTimeout(function () { appUpdateCheck((tries || 0) + 1); }, 3000);
+      return;
+    }
+    fetch('/app/version.json?t=' + Date.now(), { cache: 'no-store' }).then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+      if (!j || !(Number(j.versionCode) > APP.v)) return;
+      var later = store.json('st_upd_later', null);
+      if (later && later.v === j.versionCode && Date.now() - later.t < 864e5) return;
+      if (document.body.classList.contains('modal-open')) return setTimeout(function () { appUpdateCheck(1); }, 3000);
+      appUpdateBox(j);
+    }).catch(function () {});
+  }
+  function appUpdateBox(j) {
+    var apk = (j.url || '/app/stand-tall-realty.apk') + '?v=' + encodeURIComponent(j.versionCode);
+    var size = j.size ? (j.size / 1e6).toFixed(1) + ' MB' : '';
+    var link = function (cls, label) { return '<a class="' + cls + '" href="' + apk + '" download="stand-tall-realty.apk" data-upd-get>' + label + '</a>'; };
+    var m = openModal({ title: 'Update the app', size: 'sm', body:
+      '<div class="upd"><div class="upd-top"><img src="/assets/img/icon-192.png" alt="" width="56" height="56">' +
+      '<p><b>Stand Tall Realty</b><span>' + esc('Version ' + (j.versionName || '') + (size ? ', ' + size : '')) + '</span></p></div>' +
+      '<p class="upd-text">A new version of the app is ready. It takes about a minute, and you stay logged in.</p>' +
+      link('btn btn-gold btn-block', 'Update now') +
+      '<p class="center" style="margin:6px 0 0"><button type="button" class="btn-link" data-upd-later>Later</button></p></div>' });
+    $('[data-upd-later]', m.el).onclick = function () { store.setJson('st_upd_later', { v: j.versionCode, t: Date.now() }); m.close(); };
+    function steps() {
+      try { sessionStorage.setItem('st_upd_tapped', '1'); } catch (e) {}
+      var h = $('h2', m.el); if (h) h.textContent = 'Finish the update';
+      m.body.innerHTML = '<div class="upd"><p class="upd-text">The download has started.</p><ol class="upd-steps">' +
+        '<li>If Chrome asks about the file, tap "Download".</li>' +
+        '<li>When it finishes, tap "Open". You can also open it from your notifications.</li>' +
+        '<li>Tap "Update", then "Open".</li></ol>' +
+        '<div class="row-end">' + link('btn btn-ghost', 'Download again') + '<button type="button" class="btn btn-navy" data-upd-close>Close</button></div></div>';
+      $('[data-upd-close]', m.el).onclick = function () { m.close(); };
+      track('AppUpdate', { version: j.versionName || '' });
+    }
+    $('[data-upd-get]', m.el).addEventListener('click', function () { setTimeout(steps, 60); });   // let the download start first
+  }
+
   // ---------------------------------------------------------------- page chrome
   function init() {
     renderAccount();
@@ -1336,6 +1316,7 @@
     setInterval(function () { if (!document.hidden) refreshUnread(false); }, 45000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden) refreshUnread(false); });
     loadAnalytics();
+    if (APP) setTimeout(appUpdateCheck, 1500);
   }
 
 
@@ -1398,7 +1379,7 @@
     BUY_BUDGETS: BUY_BUDGETS, RENT_BUDGETS: RENT_BUDGETS, BUDGET_SALE: BUDGET_SALE, BUDGET_RENT: BUDGET_RENT, budgetOptions: budgetOptions, inBudget: inBudget,
     track: track, leadSource: leadSource, initials: initials, parseAmount: parseAmount, placeSearch: placeSearch, placeSuggest: placeSuggest,
     verifiedInfo: verifiedInfo, isVerifyTag: isVerifyTag, verifiedTag: verifiedTag, replyNote: replyNote, INTENT_LABEL: INTENT_LABEL,
-    IN_APP: IN_APP, loadScript: loadScript
+    IN_APP: IN_APP, APP: APP, loadScript: loadScript, onConfigChange: onConfigChange
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
 })();

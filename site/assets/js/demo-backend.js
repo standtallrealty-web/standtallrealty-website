@@ -1,5 +1,5 @@
 /* DEMO MODE ONLY — runs the real backend code inside your browser so the site can be tried before the
-   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611232314. */
+   Google Sheet is connected. Not used once API_URL is set in config.js. Generated 202611241325. */
 /*
  * Minimal Google Apps Script runtime emulator.
  * Used (1) by the automated tests in Node and (2) by the website's demo mode in the browser,
@@ -440,11 +440,13 @@ var GOOGLE_CLIENT_ID    = '';   // Google Cloud console → Google Auth Platform
 var FACEBOOK_APP_ID     = '';   // Meta for Developers → your app → App ID
 var FACEBOOK_APP_SECRET = '';   // Meta for Developers → App settings → Basic → App secret (it stays private here)
 
-// ---- Log in with WhatsApp (guide: "WhatsApp login"). Free: the client sends us a code from their WhatsApp.
-var WHATSAPP_LOGIN_NUMBER = '';   // the login WhatsApp number, with 91 in front, e.g. 919876543210
-var WHATSAPP_APP_SECRET   = '';   // Meta for Developers → your WhatsApp app → App settings → Basic → App secret
-var WHATSAPP_TOKEN        = '';   // optional: a permanent access token, so we can reply "You are logged in"
-var WHATSAPP_PHONE_ID     = '';   // optional, with the token: WhatsApp → API setup → Phone number ID
+// ---- OTP on WhatsApp (guide: "WhatsApp OTP"). The 6-digit code goes to the client's WhatsApp from your business
+// ---- number, shown as Stand Tall Realty. Meta charges about Rs 0.12 + GST per code. When this is set, OTPs go
+// ---- by WhatsApp instead of SMS. Fill the first two, Save, Run "whatsappSetup" once, then deploy a New version.
+var WHATSAPP_TOKEN        = '';   // permanent token: business.facebook.com → Settings → System users → Generate token
+var WHATSAPP_PHONE_ID     = '';   // developers.facebook.com → your app → WhatsApp → API Setup → Phone number ID
+var WHATSAPP_OTP_TEMPLATE = '';   // leave empty: whatsappSetup makes the "login_code" template and remembers it
+var WHATSAPP_APP_SECRET   = '';   // optional: App settings → Basic → App secret, to get clients' replies as enquiries
 // =========================================================================
 
 var OTP_DEMO = true;   // website preview only (codes shown on screen). Never true on the live site.
@@ -491,40 +493,66 @@ function setup() {
   Logger.log('Next: Deploy → New deployment → Web app (Execute as: Me, Who has access: Anyone).');
 }
 
-/** WhatsApp login, one time: run this from the editor (▶ Run) after adding the login number in Meta.
- *  Needs WHATSAPP_TOKEN (the temporary token from WhatsApp → API Setup is fine) and WHATSAPP_PHONE_ID.
- *  It switches the number on for messages (Meta calls this "register"), links it to your app and checks the webhook. */
+/** WhatsApp OTP, one time: run this from the editor (▶ Run) after adding your number in Meta (see the guide).
+ *  Needs WHATSAPP_TOKEN and WHATSAPP_PHONE_ID. It switches the number on (Meta calls this "register"), makes the
+ *  "login_code" template, links your app, and sends a test code to the firm's WhatsApp. Safe to run again. */
 function whatsappSetup() {
   REQ = { memo: {} };
   rememberSettings_();
-  var token = setting_('WHATSAPP_TOKEN', WHATSAPP_TOKEN), id = setting_('WHATSAPP_PHONE_ID', WHATSAPP_PHONE_ID);
+  var token = waToken_(), id = waPhoneId_(), props = PropertiesService.getScriptProperties();
   if (!token || !id) return Logger.log('⚠️ First type WHATSAPP_TOKEN and WHATSAPP_PHONE_ID in the settings at the top, tap Save, then Run again.');
-  var G = 'https://graph.facebook.com/v26.0/';
   function call(method, path, payload) {
     var o = { method: method, muteHttpExceptions: true, headers: { Authorization: 'Bearer ' + token } };
     if (payload) { o.contentType = 'application/json'; o.payload = JSON.stringify(payload); }
-    var r = UrlFetchApp.fetch(G + path, o), j = parseJson_(r.getContentText()) || {};
-    return { ok: r.getResponseCode() < 300 && !j.error, j: j, err: j.error ? str_(j.error.message) + (j.error.code ? ' (code ' + j.error.code + ')' : '') : 'HTTP ' + r.getResponseCode() };
+    var r = UrlFetchApp.fetch(WA_GRAPH + path, o), j = parseJson_(r.getContentText()) || {}, e = j.error || {};
+    return { ok: r.getResponseCode() < 300 && !j.error, j: j, code: Number(e.code || 0),
+      err: j.error ? str_((e.error_data && e.error_data.details) || e.message) + (e.code ? ' (code ' + e.code + ')' : '') : 'HTTP ' + r.getResponseCode() };
   }
+  // 1. the number
   var info = call('get', encodeURIComponent(id) + '?fields=display_phone_number,verified_name,name_status');
-  if (!info.ok) return Logger.log('❌ Meta did not accept the token or the Phone number ID: ' + info.err + '. Copy both again from WhatsApp → API Setup.');
-  Logger.log('Number: ' + info.j.display_phone_number + '   Display name: ' + info.j.verified_name + ' (' + str_(info.j.name_status).toLowerCase().replace(/_/g, ' ') + ')');
-  var props = PropertiesService.getScriptProperties(), pin = props.getProperty('WA_PIN');
+  if (!info.ok) return Logger.log('❌ Meta did not accept the token or the Phone number ID: ' + info.err + '. Copy both again (guide, Parts 3 and 4).');
+  var digits = str_(info.j.display_phone_number).replace(/\D/g, '');
+  props.setProperty('WA_NUMBER', digits);
+  Logger.log('Number: ' + info.j.display_phone_number + '   Name: ' + info.j.verified_name + ' (' + str_(info.j.name_status).toLowerCase().replace(/_/g, ' ') + ')');
+  var pin = props.getProperty('WA_PIN');
   if (!pin) { pin = String(100000 + Math.floor(Math.random() * 900000)); props.setProperty('WA_PIN', pin); }
   var reg = call('post', encodeURIComponent(id) + '/register', { messaging_product: 'whatsapp', pin: pin });
-  if (!reg.ok) return Logger.log('❌ Could not switch the number on: ' + reg.err + (/133005|PIN/i.test(reg.err) ? '. This number already has a two-step PIN: in WhatsApp Manager → Phone numbers → the number → Two-step verification, set the PIN to ' + pin + ', then Run again.' : ''));
-  Logger.log('✅ Number switched on for WhatsApp messages. Its two-step PIN is ' + pin + ' (note it down; Meta asks for it only if you move the number).');
+  if (reg.ok) Logger.log('✅ Number switched on for WhatsApp messages. Its two-step PIN is ' + pin + ' (note it down; Meta asks for it only if you move the number).');
+  else if (reg.code === 133005 || /PIN/i.test(reg.err)) return Logger.log('❌ This number already has a two-step PIN: in WhatsApp Manager → Phone numbers → the number → Two-step verification, set the PIN to ' + pin + ', then Run again.');
+  else Logger.log('⚠️ Switching the number on said: ' + reg.err + '. If the number already works, you can ignore this.');
+  // 2. the WhatsApp Business account (from the token), the template and the app link
   var dbg = call('get', 'debug_token?input_token=' + encodeURIComponent(token)), wabas = {};
   ((dbg.j.data && dbg.j.data.granular_scopes) || []).forEach(function (g) { (g.target_ids || []).forEach(function (w) { if (/whatsapp/.test(g.scope)) wabas[w] = 1; }); });
-  Object.keys(wabas).forEach(function (w) {
-    var sub = call('post', encodeURIComponent(w) + '/subscribed_apps');
-    Logger.log(sub.ok ? '✅ App linked to WhatsApp account ' + w + ' (messages will reach the website).' : '⚠️ Could not link the app to WhatsApp account ' + w + ': ' + sub.err);
-  });
-  var hook = call('get', encodeURIComponent(id) + '?fields=webhook_configuration'), url = str_(((hook.j.webhook_configuration) || {}).application);
-  Logger.log(/standtallrealty\.com\/wa-hook/.test(url) ? '✅ Webhook: ' + url
-    : '⚠️ Webhook not set yet. In Meta: WhatsApp → Configuration → Callback URL  https://www.standtallrealty.com/wa-hook  and Verify token  standtall-whatsapp-login, then subscribe to "messages".');
-  Logger.log(waOn_() ? '✅ WHATSAPP_LOGIN_NUMBER and WHATSAPP_APP_SECRET are set. Deploy a New version, then test: website → Log in → Continue with WhatsApp.'
-    : '⚠️ Still to do: type WHATSAPP_LOGIN_NUMBER (91 + the number) and WHATSAPP_APP_SECRET, Save, then Deploy a New version.');
+  var waba = Object.keys(wabas)[0];
+  if (!waba) return Logger.log('❌ The token cannot see your WhatsApp account. Make the token again with whatsapp_business_management and whatsapp_business_messaging ticked, and the WhatsApp account assigned (guide, Part 4).');
+  var t = call('get', encodeURIComponent(waba) + '/message_templates?name=' + WA_TEMPLATE_NAME + '&fields=name,status,language,category,rejected_reason');
+  var tpl = ((t.j && t.j.data) || []).filter(function (x) { return x.name === WA_TEMPLATE_NAME; })[0];
+  if (!tpl) {
+    var mk = call('post', encodeURIComponent(waba) + '/message_templates', { name: WA_TEMPLATE_NAME, language: 'en', category: 'authentication',
+      message_send_ttl_seconds: OTP_TTL, components: [{ type: 'body', add_security_recommendation: true }, { type: 'footer', code_expiration_minutes: 10 },
+        { type: 'buttons', buttons: [{ type: 'otp', otp_type: 'copy_code', text: 'Copy code' }] }] });
+    if (!mk.ok) return Logger.log('❌ Could not make the login_code template: ' + mk.err);
+    tpl = { name: WA_TEMPLATE_NAME, status: mk.j.status || 'PENDING', language: 'en' };
+    Logger.log('✅ Made the template "login_code": "<code> is your verification code. For your security, do not share this code."');
+  }
+  var status = str_(tpl.status).toUpperCase();
+  props.setProperty('WA_OTP_LANG', str_(tpl.language) || 'en');
+  if (status !== 'APPROVED') {
+    if (status === 'REJECTED') return Logger.log('❌ Meta rejected the template: ' + str_(tpl.rejected_reason || 'no reason given') + '. Delete it in WhatsApp Manager → Message templates, then Run again.');
+    return Logger.log('⏳ Meta is checking the template "login_code" (usually a few minutes). Run whatsappSetup again in 10 minutes.');
+  }
+  props.setProperty('SET_WHATSAPP_OTP_TEMPLATE', WA_TEMPLATE_NAME); REQ.cfg.WHATSAPP_OTP_TEMPLATE = WA_TEMPLATE_NAME;
+  Logger.log('✅ Template "login_code" is approved.');
+  var sub = call('post', encodeURIComponent(waba) + '/subscribed_apps');
+  Logger.log(sub.ok ? '✅ App linked to your WhatsApp account.' : '⚠️ Could not link the app to your WhatsApp account: ' + sub.err);
+  // 3. a real test: a code to the firm's own WhatsApp
+  try {
+    waOtpSend_(FIRM_PHONE, newOtp_());
+    Logger.log('✅ Test code sent to +91 ' + FIRM_PHONE + ' on WhatsApp. Check that phone, then Deploy a New version. WhatsApp OTP is ready.');
+  } catch (e) {
+    var last = parseJson_(props.getProperty('OTP_LAST_ERROR')) || {};
+    Logger.log('❌ The test code did not go: ' + str_(last.d || (e && e.message)) + '. Most often: add a payment method in WhatsApp Manager (guide, Part 5), then Run again.');
+  }
 }
 
 function doGet(e) {
@@ -561,9 +589,6 @@ var ACTIONS = {
   register: { fn: apiRegister_, write: true },
   login: { fn: apiLogin_, write: true },
   socialLogin: { fn: apiSocialLogin_, write: true },
-  waStart: { fn: apiWaStart_ },
-  waCheck: { fn: apiWaCheck_ },
-  waLogin: { fn: apiWaLogin_, write: true },
   waHook: { fn: apiWaHook_ },
   // signed-in users
   me: { fn: apiMe_, user: true },
@@ -653,8 +678,8 @@ function rememberSettings_() {
   setting_('ADMIN_PASSWORD', ADMIN_PASSWORD); setting_('NOTIFY_EMAIL', NOTIFY_EMAIL); setting_('FAST2SMS_API_KEY', FAST2SMS_API_KEY);
   setting_('FAST2SMS_OTP_ID', FAST2SMS_OTP_ID); setting_('MSGCENTRAL_CUSTOMER_ID', MSGCENTRAL_CUSTOMER_ID); setting_('MSGCENTRAL_PASSWORD', MSGCENTRAL_PASSWORD);
   setting_('GOOGLE_CLIENT_ID', GOOGLE_CLIENT_ID); setting_('FACEBOOK_APP_ID', FACEBOOK_APP_ID); setting_('FACEBOOK_APP_SECRET', FACEBOOK_APP_SECRET);
-  setting_('WHATSAPP_LOGIN_NUMBER', WHATSAPP_LOGIN_NUMBER); setting_('WHATSAPP_APP_SECRET', WHATSAPP_APP_SECRET);
   setting_('WHATSAPP_TOKEN', WHATSAPP_TOKEN); setting_('WHATSAPP_PHONE_ID', WHATSAPP_PHONE_ID);
+  setting_('WHATSAPP_OTP_TEMPLATE', WHATSAPP_OTP_TEMPLATE); setting_('WHATSAPP_APP_SECRET', WHATSAPP_APP_SECRET);
 }
 
 // ============================== SHEET LAYER ==============================
@@ -1041,17 +1066,19 @@ function apiChangePassword_(b, ctx) {
   return { done: true, user: userView_(ctx.user) };
 }
 
-// ============================== OTP (SMS) ==============================
-// Fast2SMS "OTP SMS" route: we create the 6-digit code, Fast2SMS delivers "Your OTP: 123456".
+// ============================== OTP (WhatsApp or SMS) ==============================
+// WhatsApp (when set up): we create the 6-digit code and send it from your WhatsApp Business number with the
+// approved "login_code" template. Fast2SMS "OTP SMS" route: we create the code, Fast2SMS delivers it.
 // Fast2SMS Smart OTP and Message Central VerifyNow create and check the code on their side.
 
 var OTP_TTL = 600;        // seconds an OTP stays valid
 var OTP_RESEND = 30;      // seconds before "Resend OTP" works
 var OTP_MAX_TRIES = 5;    // wrong codes allowed per OTP
 var OTP_PER_HOUR = 5;     // OTP SMS per mobile number per hour
-var OTP_NAMES = { fast2sms: 'Fast2SMS', fast2sms_smart: 'Fast2SMS Smart OTP', msgcentral: 'Message Central', demo: 'Preview (no SMS)' };
+var OTP_NAMES = { whatsapp: 'WhatsApp', fast2sms: 'Fast2SMS', fast2sms_smart: 'Fast2SMS Smart OTP', msgcentral: 'Message Central', demo: 'Preview (no SMS)' };
 
 function otpProvider_() {
+  if (waOtpOn_()) return 'whatsapp';
   if (setting_('FAST2SMS_API_KEY', FAST2SMS_API_KEY)) return setting_('FAST2SMS_OTP_ID', FAST2SMS_OTP_ID) ? 'fast2sms_smart' : 'fast2sms';
   if (setting_('MSGCENTRAL_CUSTOMER_ID', MSGCENTRAL_CUSTOMER_ID) && setting_('MSGCENTRAL_PASSWORD', MSGCENTRAL_PASSWORD)) return 'msgcentral';
   return OTP_DEMO ? 'demo' : '';
@@ -1070,7 +1097,8 @@ function otpUsage_() {
 
 function apiConfig_() {
   var fb = setting_('FACEBOOK_APP_ID', FACEBOOK_APP_ID) && setting_('FACEBOOK_APP_SECRET', FACEBOOK_APP_SECRET) ? setting_('FACEBOOK_APP_ID', FACEBOOK_APP_ID) : '';
-  return { otp: otpOn_(), otpEnquiry: otpOn_() && !!OTP_ON_ENQUIRY, google: setting_('GOOGLE_CLIENT_ID', GOOGLE_CLIENT_ID), facebook: fb, wa: waOn_() };
+  return { otp: otpOn_(), otpVia: otpProvider_() === 'whatsapp' ? 'whatsapp' : 'sms', otpEnquiry: otpOn_() && !!OTP_ON_ENQUIRY,
+    google: setting_('GOOGLE_CLIENT_ID', GOOGLE_CLIENT_ID), facebook: fb };
 }
 
 /** Sends an OTP to a 10-digit number. purpose: 'login' or 'lead'. */
@@ -1086,7 +1114,7 @@ function sendOtp_(phone, purpose) {
   }
   if (Number(c.get('otph_' + phone) || 0) >= OTP_PER_HOUR) throw uerr_('Too many OTPs were sent to this number. Please try again after an hour.', 'OTP_RATE');
   if (otpUsage_() >= OTP_DAILY_LIMIT) {
-    otpAlert_('limit', 'Today\'s OTP limit of ' + OTP_DAILY_LIMIT + ' SMS is used up (OTP_DAILY_LIMIT in Code.gs).');
+    otpAlert_('limit', 'Today\'s OTP limit of ' + OTP_DAILY_LIMIT + ' codes is used up (OTP_DAILY_LIMIT in Code.gs).');
     throw uerr_('We could not send an OTP right now.', 'OTP_LIMIT');
   }
   var rec = { t: now, x: now + OTP_TTL * 1000, n: 0, p: prov }, code = '';
@@ -1096,11 +1124,12 @@ function sendOtp_(phone, purpose) {
     code = newOtp_();
     rec.h = otpHash_(code, phone);
     if (prov === 'fast2sms') f2sSend_(phone, code);
+    else if (prov === 'whatsapp') waOtpSend_(phone, code);
   }
   c.put(key, JSON.stringify(rec), OTP_TTL);
   tooMany_('otph_' + phone, OTP_PER_HOUR, 3600);
   PropertiesService.getScriptProperties().setProperty('OTP_USAGE', istDay_() + ':' + (otpUsage_() + 1));
-  var out = { sent: true, phone: phone, resendIn: OTP_RESEND };
+  var out = { sent: true, phone: phone, resendIn: OTP_RESEND, via: prov === 'whatsapp' ? 'whatsapp' : 'sms' };
   if (prov === 'demo') out.demoOtp = code;
   return out;
 }
@@ -1109,9 +1138,10 @@ function sendOtp_(phone, purpose) {
 function checkOtp_(phone, purpose, code) {
   code = str_(code).replace(/\D/g, '');
   var c = cache_(), key = otpKey_(purpose, phone), rec = parseJson_(c.get(key));
-  if (!rec || rec.x < Date.now()) throw uerr_('This OTP has expired. Tap "Resend OTP" to get a new one.', 'OTP_EXPIRED');
-  if (rec.n >= OTP_MAX_TRIES) throw uerr_('Too many wrong tries. Tap "Resend OTP" to get a new one.', 'OTP_LOCKED');
-  if (!/^\d{4,8}$/.test(code)) throw uerr_('Enter the 6-digit OTP from the SMS.', 'VALIDATION');
+  var viaWa = (rec ? rec.p : otpProvider_()) === 'whatsapp';
+  if (!rec || rec.x < Date.now()) throw uerr_(viaWa ? 'This code has expired. Tap "Resend code" to get a new one.' : 'This OTP has expired. Tap "Resend OTP" to get a new one.', 'OTP_EXPIRED');
+  if (rec.n >= OTP_MAX_TRIES) throw uerr_(viaWa ? 'Too many wrong tries. Tap "Resend code" to get a new one.' : 'Too many wrong tries. Tap "Resend OTP" to get a new one.', 'OTP_LOCKED');
+  if (!/^\d{4,8}$/.test(code)) throw uerr_(viaWa ? 'Enter the 6-digit code from WhatsApp.' : 'Enter the 6-digit OTP from the SMS.', 'VALIDATION');
   var good;
   if (rec.p === 'msgcentral') good = mcValidate_(phone, rec.v, code);
   else if (rec.p === 'fast2sms_smart') good = f2sSmartVerify_(phone, code);
@@ -1119,8 +1149,8 @@ function checkOtp_(phone, purpose, code) {
   if (!good) {
     rec.n++;
     c.put(key, JSON.stringify(rec), Math.max(1, Math.ceil((rec.x - Date.now()) / 1000)));
-    if (rec.n >= OTP_MAX_TRIES) throw uerr_('Too many wrong tries. Tap "Resend OTP" to get a new one.', 'OTP_LOCKED');
-    throw uerr_('That OTP is not correct. Please check the SMS and try again.', 'OTP_WRONG');
+    if (rec.n >= OTP_MAX_TRIES) throw uerr_(viaWa ? 'Too many wrong tries. Tap "Resend code" to get a new one.' : 'Too many wrong tries. Tap "Resend OTP" to get a new one.', 'OTP_LOCKED');
+    throw uerr_(viaWa ? 'That code is not correct. Please check WhatsApp and try again.' : 'That OTP is not correct. Please check the SMS and try again.', 'OTP_WRONG');
   }
   c.remove(key);
   return true;
@@ -1202,7 +1232,9 @@ function mcValidate_(phone, vid, code) {
 
 /** Provider said no: tell the admin (at most every 6 hours) and give the visitor a calm message. */
 function smsFail_(who, r) {
-  var j = r.json || {}, msg = j.message || j.errorMessage || (j.data && j.data.errorMessage) || r.text || 'no reply';
+  var j = r.json || {}, ge = j.error || null;
+  var msg = (ge && ((ge.error_data && ge.error_data.details) || ge.message)) || j.message || j.errorMessage || (j.data && j.data.errorMessage) || r.text || 'no reply';
+  if (ge && ge.code) j.status_code = ge.code;
   if (Array.isArray(msg)) msg = msg.join(' ');
   otpAlert_('fail', who + ' error ' + (j.status_code || j.responseCode || r.code || '') + ': ' + str_(msg).slice(0, 300));
   throw uerr_('We could not send the OTP right now. Please try again in a few minutes.', 'OTP_FAIL');
@@ -1215,9 +1247,12 @@ function otpAlert_(kind, detail) {
     var k = 'otp_alert_' + kind;
     if (cache_().get(k)) return;
     cache_().put(k, '1', 21600);
-    notifyAdmin_('Website OTP problem: ' + (kind === 'limit' ? 'daily limit reached' : 'SMS not sent'),
+    var viaWa = otpProvider_() === 'whatsapp';
+    notifyAdmin_('Website OTP problem: ' + (kind === 'limit' ? 'daily limit reached' : (viaWa ? 'WhatsApp code not sent' : 'SMS not sent')),
       '<p>' + esc_(detail) + '</p><p>Enquiries are still saved. They show as <b>Not verified</b> in the admin panel until OTP works again.</p>' +
-      (kind === 'fail' ? '<p>Common reasons: SMS balance is over, Fast2SMS OTP KYC is not complete yet, or the API key was copied wrongly.</p>' : ''));
+      (kind === 'fail' ? (viaWa
+        ? '<p>Common reasons: no payment method in WhatsApp Manager, the token was copied wrongly or removed, or the login_code template is not approved yet. In your script, Run <b>whatsappSetup</b>: its log says what is wrong.</p>'
+        : '<p>Common reasons: SMS balance is over, Fast2SMS OTP KYC is not complete yet, or the API key was copied wrongly.</p>') : ''));
   } catch (e) {}
 }
 
@@ -1287,11 +1322,10 @@ function socialFinish_(b) {
   var col = p.pv + 'Id';
   var done = userBySocial_(p.pv, p.sid);              // finished meanwhile in another tab
   if (done) return loginUser_(done, false);
-  var phone = b.phoneProof ? proofPhone_(b.phoneProof) : normPhone_(b.phone);
-  if (b.phoneProof && !phone) throw uerr_('Your WhatsApp check has expired. Please verify your number again.', 'WA_EXPIRED');
+  var phone = normPhone_(b.phone);
   if (!phone) throw uerr_('Please enter a valid 10-digit mobile number.', 'VALIDATION');
-  var proven = !!b.phoneProof;
-  if (!proven && otpOn_()) {
+  var proven = false;
+  if (otpOn_()) {
     if (!str_(b.otp)) throw uerr_('Please verify your mobile number with OTP.', 'OTP_REQUIRED');
     checkOtp_(phone, 'login', b.otp);
     proven = true;
@@ -1352,79 +1386,33 @@ function facebookUser_(accessToken) {
   return { provider: 'facebook', id: String(me.id), name: clean_(me.name, 60), email: validEmail_(email) ? email : '' };
 }
 
-// ============================== LOG IN WITH WHATSAPP ==============================
-// Free for both sides: the client sends a code to our login number from their own WhatsApp, so
-// WhatsApp tells us their number. Flow: waStart → client taps Send in WhatsApp → Meta calls the website's
-// /wa-hook (worker) → waHook marks the code → the page asks waCheck → waLogin logs in or creates the account.
+// ============================== WHATSAPP (OTP codes) ==============================
+// The website sends the client a 6-digit code from your WhatsApp Business number (Meta's Cloud API) with the
+// approved authentication template "login_code": "<code> is your verification code." plus a Copy code button.
 
-var WA_CODE_RE = /\bST-([A-HJ-NP-Z2-9]{6})\b/i;
+var WA_GRAPH = 'https://graph.facebook.com/v26.0/';
+var WA_TEMPLATE_NAME = 'login_code';
 
-function waOn_() {
-  return /^\d{11,15}$/.test(setting_('WHATSAPP_LOGIN_NUMBER', WHATSAPP_LOGIN_NUMBER).replace(/\D/g, '')) &&
-    !!setting_('WHATSAPP_APP_SECRET', WHATSAPP_APP_SECRET);
+function waToken_() { return setting_('WHATSAPP_TOKEN', WHATSAPP_TOKEN); }
+function waPhoneId_() { return setting_('WHATSAPP_PHONE_ID', WHATSAPP_PHONE_ID).replace(/\s/g, ''); }
+function waTemplate_() { return setting_('WHATSAPP_OTP_TEMPLATE', WHATSAPP_OTP_TEMPLATE); }
+function waOtpOn_() { return !!(waToken_() && waPhoneId_() && waTemplate_()); }
+
+/** Sends "<code> is your verification code" to +91 phone on WhatsApp. Throws a calm error if Meta says no. */
+function waOtpSend_(phone, code) {
+  var lang = str_(PropertiesService.getScriptProperties().getProperty('WA_OTP_LANG')) || 'en';
+  var r = fetch_(WA_GRAPH + encodeURIComponent(waPhoneId_()) + '/messages', { method: 'post', contentType: 'application/json',
+    headers: { Authorization: 'Bearer ' + waToken_() },
+    payload: JSON.stringify({ messaging_product: 'whatsapp', recipient_type: 'individual', to: '91' + phone, type: 'template',
+      template: { name: waTemplate_(), language: { code: lang }, components: [
+        { type: 'body', parameters: [{ type: 'text', text: code }] },
+        { type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: code }] }] } }) });
+  if (r.json && r.json.messages && r.json.messages.length) return true;
+  smsFail_('WhatsApp', r);
 }
 
-function waRandom_(n, alphabet) {
-  var out = '', hex = (Utilities.getUuid() + Utilities.getUuid()).replace(/-/g, '');
-  for (var i = 0; out.length < n; i += 2) out += alphabet.charAt(parseInt(hex.substr(i % hex.length, 2), 16) % alphabet.length);
-  return out;
-}
-
-/** {mode:'login'|'phone'} → {code, key, link, number, text}. "phone" only proves the number (Google/Facebook step). */
-function apiWaStart_(b) {
-  if (!waOn_()) throw uerr_('WhatsApp login is not switched on yet.', 'WA_OFF');
-  if (tooMany_('wa_start', 3000, 3600)) throw uerr_('Too many attempts. Please try again in a few minutes.', 'RATE');
-  var number = setting_('WHATSAPP_LOGIN_NUMBER', WHATSAPP_LOGIN_NUMBER).replace(/\D/g, '');
-  var code = 'ST-' + waRandom_(6, 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789');
-  var key = waRandom_(24, 'abcdefghijklmnopqrstuvwxyz0123456789');
-  cache_().put('wa_' + code, JSON.stringify({ s: 'wait', k: key, m: b.mode === 'phone' ? 'phone' : 'login' }), 900);
-  var text = 'Log me in to ' + BRAND + '. Code: ' + code;
-  return { code: code, key: key, number: number, text: text, expiresIn: 900,
-    link: 'https://wa.me/' + number + '?text=' + encodeURIComponent(text) };
-}
-
-function waEntry_(b) {
-  var code = str_(b.code).toUpperCase(), raw = /^ST-[A-Z0-9]{6}$/.test(code) ? cache_().get('wa_' + code) : null;
-  var w = raw ? parseJson_(raw) : null;
-  if (!w || w.k !== str_(b.key)) throw uerr_('This login code has expired. Please start again.', 'WA_EXPIRED');
-  w.code = code;
-  return w;
-}
-
-/** {code, key} → {waiting:true} until the client's WhatsApp message arrives, then {ready:true}. */
-function apiWaCheck_(b) {
-  var w = waEntry_(b);
-  if (w.s === 'bad') throw uerr_('Please use an Indian WhatsApp number (+91), or log in with Google.', 'WA_NUMBER');
-  return w.s === 'ok' ? { ready: true, name: str_(w.nm) } : { waiting: true };
-}
-
-/** {code, key} after waCheck said ready → logged in, or {needName, proof} for a new number, or {proof} in
- *  "phone" mode. {proof, name, email} then creates the account. */
-function apiWaLogin_(b) {
-  if (b.proof) {
-    var phone = proofPhone_(b.proof);
-    if (!phone) throw uerr_('Your WhatsApp check has expired. Please start again.', 'WA_EXPIRED');
-    var existing = userByPhone_(phone);
-    if (existing) return loginUser_(existing, true);
-    var name = clean_(b.name, 60), email = clean_(b.email, 120).toLowerCase();
-    if (name.length < 2) throw uerr_('Please enter your full name.', 'VALIDATION');
-    if (email && !validEmail_(email)) throw uerr_('Please enter a valid email address or leave it empty.', 'VALIDATION');
-    var u = { id: rid_('U'), createdAt: now_(), name: name, phone: phone, verified: 'Yes', email: email, status: 'Active',
-      lastLoginAt: now_(), passHash: '', salt: '' };
-    appendObj_('Users', u);
-    logActivity_('signup', '', u.id, 'WhatsApp');
-    return { token: userToken_(u.id), user: userView_(u), created: true };
-  }
-  var w = waEntry_(b);
-  if (w.s !== 'ok') throw uerr_('We have not received your WhatsApp message yet.', 'WA_WAITING');
-  cache_().remove('wa_' + w.code);                                  // each code works once
-  if (w.m === 'phone') return { proof: phoneProof_(w.ph), phone: w.ph };
-  var user = userByPhone_(w.ph);
-  if (user) return loginUser_(user, true);
-  return { needName: true, proof: phoneProof_(w.ph), phone: w.ph, name: clean_(w.nm, 60) };
-}
-
-/** Called by the website's /wa-hook with Meta's webhook body, unchanged, and its X-Hub-Signature-256 header. */
+/** Called by the website's /wa-hook with Meta's webhook body, unchanged, and its X-Hub-Signature-256 header.
+ *  Only when WHATSAPP_APP_SECRET is set: clients' messages to the OTP number reach the team as enquiries. */
 function apiWaHook_(b) {
   var secret = setting_('WHATSAPP_APP_SECRET', WHATSAPP_APP_SECRET), body = str_(b.body);
   if (!secret || !body) throw uerr_('Not set up.', 'WA_OFF');
@@ -1438,34 +1426,25 @@ function apiWaHook_(b) {
       (v.messages || []).forEach(function (msg) {
         var from = str_(msg.from), text = msg.type === 'text' && msg.text ? str_(msg.text.body) : '';
         if (msg.id) { if (cache_().get('wamid_' + str_(msg.id).slice(-80))) return; cache_().put('wamid_' + str_(msg.id).slice(-80), '1', 21600); }   // Meta may deliver twice
-        var m = text.match(WA_CODE_RE);
-        if (!m) { waLead_(from, names[from], text || '(' + (str_(msg.type) || 'other') + ' message)'); return; }
-        var key = 'wa_ST-' + m[1].toUpperCase(), w = parseJson_(cache_().get(key) || '');
-        if (!w) { waReply_(from, 'This login code has expired. Please tap Continue with WhatsApp again.'); return; }
-        if (w.s !== 'wait') return;                                   // the same message delivered twice
-        var phone = normPhone_(from);
-        w.s = phone ? 'ok' : 'bad'; w.ph = phone; w.nm = clean_(names[from] || '', 60);
-        cache_().put(key, JSON.stringify(w), 900);
-        done++;
-        waReply_(from, phone ? 'Thank you! Go back to the ' + BRAND + ' app or website. You are being logged in.'
-          : 'Sorry, we can only log in Indian (+91) WhatsApp numbers for now. Please log in with Google instead.');
+        if (waLead_(from, names[from], text || '(' + (str_(msg.type) || 'other') + ' message)')) done++;
       });
     });
   });
   return { done: done };
 }
 
-/** Someone wrote to the login number without a login code: nobody reads that number, so the message goes to the
- *  team as an enquiry (WhatsApp proves the number) and, with a token, the client is pointed to the team's number. */
+/** A client wrote to the OTP number. Nobody reads that number in an app, so the message goes to the team as an
+ *  enquiry (WhatsApp proves the number), and the client is told where the team replies from. */
 function waLead_(from, name, text) {
-  var phone = normPhone_(from);
-  if (phone && !tooMany_('walead_' + phone, 3, 3600)) {
-    saveLead_({ intent: INTENTS.other, name: clean_(name || '', 80) || 'WhatsApp client', phone: phone, email: '', details: '',
-      message: clean_(text, 1500), listingId: '', listingTitle: '', page: '', source: 'WhatsApp login number', userId: '', verified: 'Yes' },
-      true, 'Sent to the WhatsApp login number. Please reply from +91 ' + FIRM_PHONE.slice(0, 5) + ' ' + FIRM_PHONE.slice(5) + '.');
-  }
-  waReply_(from, 'This WhatsApp number is only for logging in to ' + BRAND + '. Our team will reply to you from +91 ' +
-    FIRM_PHONE.slice(0, 5) + ' ' + FIRM_PHONE.slice(5) + '. You can also message that number on WhatsApp.');
+  var phone = normPhone_(from), firm = '+91 ' + FIRM_PHONE.slice(0, 5) + ' ' + FIRM_PHONE.slice(5);
+  if (!phone || tooMany_('walead_' + phone, 3, 3600)) return false;
+  saveLead_({ intent: INTENTS.other, name: clean_(name || '', 80) || 'WhatsApp client', phone: phone, email: '', details: '',
+    message: clean_(text, 1500), listingId: '', listingTitle: '', page: '', source: 'WhatsApp OTP number', userId: '', verified: 'Yes' },
+    true, 'Sent to the WhatsApp number that sends login codes. Please reply from ' + firm + '.');
+  var own = str_(PropertiesService.getScriptProperties().getProperty('WA_NUMBER'));
+  if (own.slice(-10) !== FIRM_PHONE)      // the codes come from a separate number: point the client to the team's number
+    waReply_(from, 'Thank you for your message. This number only sends login codes for ' + BRAND + '. Our team will reply to you from ' + firm + ' on WhatsApp.');
+  return true;
 }
 
 /** Optional reply from the login number. Only when a token is set (Meta may charge for replies). */
@@ -1832,7 +1811,7 @@ function apiLead_(b, ctx) {
   try {
     return { id: lead.id, saved: true, otp: sendOtp_(phone, 'lead') };
   } catch (e) {
-    if (e.code === 'OTP_WAIT') return { id: lead.id, saved: true, otp: { sent: false, phone: phone, resendIn: e.wait || OTP_RESEND } };
+    if (e.code === 'OTP_WAIT') return { id: lead.id, saved: true, otp: { sent: false, phone: phone, resendIn: e.wait || OTP_RESEND, via: otpProvider_() === 'whatsapp' ? 'whatsapp' : 'sms' } };
     notifyLead_(lead, 'Not verified: the OTP SMS could not be sent.');
     return { id: lead.id, saved: true, otpError: e.userMessage || '' };
   }

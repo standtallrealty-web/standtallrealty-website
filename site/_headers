@@ -5,6 +5,9 @@
   Permissions-Policy: geolocation=(self), camera=(), microphone=()
 /assets/*
   Cache-Control: public, max-age=604800
-/app/*
+/app/stand-tall-realty.apk
   Content-Disposition: attachment; filename="stand-tall-realty.apk"
   Cache-Control: no-cache
+/app/version.json
+  Cache-Control: no-cache
+  Access-Control-Allow-Origin: *

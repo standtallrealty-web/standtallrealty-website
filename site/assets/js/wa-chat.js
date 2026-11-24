@@ -522,15 +522,16 @@
       });
     });
   }
-  /** Only when SMS OTP is switched on: confirm the number, like the enquiry form does. */
+  /** Only when OTP is switched on: confirm the number, like the enquiry form does (code by WhatsApp or SMS). */
   function otpStep(r, p) {
-    bot(esc('One last step: please confirm your number with the OTP we sent by SMS.'));
+    var viaWa = (r.otp && r.otp.via) === 'whatsapp';
+    bot(esc(viaWa ? 'One last step: please confirm your number with the 6-digit code we sent on WhatsApp.' : 'One last step: please confirm your number with the OTP we sent by SMS.'));
     return queue.then(function () {
       var ph = (r.otp && r.otp.phone) || p.phone;
       repliesEl.innerHTML = '';
-      setInput(null, 'Enter the OTP above');
+      setInput(null, viaWa ? 'Enter the code above' : 'Enter the OTP above');
       repliesEl.appendChild(ST.otpBox({
-        phone: ph, resendIn: r.otp.resendIn, demoOtp: r.otp.demoOtp, verifyLabel: 'Verify number', waText: waText(),
+        phone: ph, resendIn: r.otp.resendIn, demoOtp: r.otp.demoOtp, via: r.otp.via, verifyLabel: 'Verify number', waText: waText(),
         onVerify: function (code) { return ST.api('verifyLead', { id: r.id, phone: ph, otp: code }).then(function () { clearReplies(); return done(); }); },
         onResend: function () { return ST.api('sendOtp', { phone: ph, purpose: 'lead', leadId: r.id }); },
         onChange: function () { clearReplies(); go('phone'); }

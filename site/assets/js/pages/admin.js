@@ -69,10 +69,10 @@
       otpPanel(o.otp || {}) + '</div>';
   }
   function otpPanel(s) {
-    if (!s.on) return '<div class="panel" id="otp-status"><h2>SMS OTP</h2><p><span class="pill">Off</span></p><p class="muted">Enquiries arrive without checking the mobile number. To switch on real OTP, paste your Fast2SMS API key in Code.gs (guide, Step 7) and deploy a new version.</p></div>';
-    return '<div class="panel" id="otp-status"><h2>SMS OTP</h2><p><span class="pill ok">' + icon('shield') + 'On</span> <span class="muted">' + esc(s.provider) + '</span></p>' +
-      '<p class="muted">' + (s.sentToday || 0) + ' of ' + (s.limit || 0) + ' OTP SMS used today. ' + (s.enquiry ? 'Enquiry forms ask clients to verify their number.' : 'Enquiry forms do not ask for OTP (OTP_ON_ENQUIRY is false).') + '</p>' +
-      (s.lastError ? '<p class="form-error">Last SMS problem, ' + esc(ST.timeAgo(s.lastErrorAt)) + ': ' + esc(s.lastError) + '</p>' : '') + '</div>';
+    if (!s.on) return '<div class="panel" id="otp-status"><h2>OTP</h2><p><span class="pill">Off</span></p><p class="muted">Enquiries arrive without checking the mobile number. To switch on OTP, set up WhatsApp OTP (guide "WhatsApp OTP") or paste a Fast2SMS API key in Code.gs, and deploy a new version.</p></div>';
+    return '<div class="panel" id="otp-status"><h2>OTP</h2><p><span class="pill ok">' + icon('shield') + 'On</span> <span class="muted">' + esc(s.provider) + '</span></p>' +
+      '<p class="muted">' + (s.sentToday || 0) + ' of ' + (s.limit || 0) + ' codes sent today. ' + (s.enquiry ? 'Enquiry forms ask clients to verify their number.' : 'Enquiry forms do not ask for OTP (OTP_ON_ENQUIRY is false).') + '</p>' +
+      (s.lastError ? '<p class="form-error">Last OTP problem, ' + esc(ST.timeAgo(s.lastErrorAt)) + ': ' + esc(s.lastError) + '</p>' : '') + '</div>';
   }
   function kpi(href, n, label, alert) { return '<a class="kpi' + (alert ? ' alert' : '') + '" href="' + href + '"><b>' + (n || 0) + '</b><span>' + esc(label) + '</span></a>'; }
 

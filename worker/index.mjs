@@ -6,8 +6,11 @@
                               data and text already in the HTML, so Google can read it without running JavaScript.
    - /property-in-*        -> the area page with links to that area's live listings.
    - /sitemap.xml          -> static pages, area pages and every live listing.
-   - /wa-hook                    -> WhatsApp login: Meta tells us a client sent their login code. Answered at once;
-                                  the message goes on to the Apps Script API, which checks Meta's signature itself.
+   - /wa-hook                    -> WhatsApp: Meta tells us a client wrote to the number that sends login codes.
+                                  Answered at once; the message goes on to the Apps Script API, which checks Meta's
+                                  signature itself and saves it as an enquiry.
+   - /api/config                 -> the login settings (OTP by WhatsApp or SMS, Google / Facebook IDs) from the edge,
+                                  so the app's login screen does not wait for Apps Script. Refreshed every 5 minutes.
    - /.well-known/assetlinks.json -> tells Chrome that the Android app (android/) belongs to this website,
                               so the app can show the site full screen and website links open in the app.
    Listing data comes from the Google Apps Script API (the same one the website uses) and is cached for 15 minutes.
@@ -26,6 +29,7 @@ const ANDROID_APP_FINGERPRINTS = [
 // WhatsApp webhook check word, typed in Meta's webhook settings. Not a secret: every message is also
 // signed by Meta with the app secret, and Code.gs checks that signature.
 const WA_VERIFY_TOKEN = 'standtall-whatsapp-login';
+const CONFIG_FRESH = 300000;   // ms: after this the edge copy of the login settings is refreshed in the background
 const SSR_MARK = '<!--area-ssr--><div class="skeleton" style="min-height:280px;grid-column:1/-1"></div>';
 
 export default {
@@ -34,6 +38,7 @@ export default {
     const path = url.pathname;
     if (path === '/.well-known/assetlinks.json') return assetLinks();
     if (path === '/wa-hook') return waHook(request, env, ctx, url);
+    if (path === '/api/config') return configJson(env, ctx, url);
     try {
       if (path.endsWith('.html')) return cleanUrl(request, env, url);
       if (path === '/property') return await propertyPage(request, env, ctx, url);
@@ -136,6 +141,41 @@ async function areas(env, url) {
 function areaFor(list, locality) {
   const loc = String(locality || '').toLowerCase();
   return list.find(a => a.match.some(m => loc.indexOf(m.toLowerCase()) >= 0)) || null;
+}
+
+/** Login settings from the edge cache. An old copy is still answered at once, and refreshed in the background. */
+async function configJson(env, ctx, url) {
+  const cache = typeof caches !== 'undefined' ? caches.default : null;
+  const key = new Request(SITE + '/__worker_cache/config-v1');
+  const send = (text, status) => new Response(text, { status: status || 200,
+    headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
+  const hit = cache ? await cache.match(key) : null;
+  if (hit) {
+    if (Date.now() - Number(hit.headers.get('x-fetched') || 0) > CONFIG_FRESH) ctx.waitUntil(refreshConfig(env, url, cache, key).catch(() => {}));
+    return send(await hit.text());
+  }
+  try {
+    const text = await refreshConfig(env, url, cache, key);
+    return send(text);
+  } catch (e) {
+    return send(JSON.stringify({ ok: false, code: 'UNAVAILABLE' }), 503);
+  }
+}
+async function refreshConfig(env, url, cache, key) {
+  const endpoint = await apiUrl(env, url);
+  if (!endpoint) throw new Error('no API_URL');
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), TIMEOUT);
+  let body;
+  try {
+    const r = await fetch(endpoint, { method: 'POST', redirect: 'follow', signal: ac.signal,
+      headers: { 'content-type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'config', noCount: true }) });
+    body = await r.json();
+  } finally { clearTimeout(timer); }
+  if (!body || !body.ok || !body.data) throw new Error('config: ' + ((body && body.code) || 'no answer'));
+  const text = JSON.stringify({ ok: true, data: body.data });
+  if (cache) await cache.put(key, new Response(text, { headers: { 'content-type': 'application/json', 'cache-control': 'public, max-age=86400', 'x-fetched': String(Date.now()) } }));
+  return text;
 }
 
 let API_URL = null;   // read from the website's config.js so there is one place to change it
